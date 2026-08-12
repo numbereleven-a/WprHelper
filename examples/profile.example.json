@@ -1,0 +1,24 @@
+{
+  "SchemaVersion": 3,
+  "Name": "CPU file mode",
+  "Language": 0,
+  "WprPath": "C:\\Windows\\System32\\wpr.exe",
+  "WprProfile": "CPU",
+  "WprProfiles": ["CPU"],
+  "FileMode": true,
+  "WprStartArguments": "",
+  "TargetPath": "C:\\Windows\\System32\\notepad.exe",
+  "TargetArguments": "",
+  "WorkingDirectory": "C:\\Windows\\System32",
+  "RunTargetElevated": false,
+  "Stop": {
+    "StopAfterTargetExit": true,
+    "TargetExitDelay": "00:00:00",
+    "MaximumDuration": "00:05:00",
+    "MinimumFreeBytes": 1073741824
+  },
+  "LocalDirectory": "C:\\Traces",
+  "DestinationDirectory": "",
+  "FileNameTemplate": "{AppName}_{ComputerName}_{DateTime}",
+  "OverwriteExisting": false
+}

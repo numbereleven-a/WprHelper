@@ -1,0 +1,33 @@
+name: windows
+on:
+  push:
+  pull_request:
+jobs:
+  build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore WprHelper.sln
+      - run: dotnet format WprHelper.sln --verify-no-changes --no-restore
+      - run: dotnet build WprHelper.sln -c Release --no-restore
+      - run: dotnet test WprHelper.sln -c Release --no-build --collect:"XPlat Code Coverage" --results-directory TestResults
+      - run: dotnet publish src/WprHelper.App/WprHelper.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o artifacts/win-x64
+      - shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path artifacts/release -Force | Out-Null
+          Compress-Archive -LiteralPath artifacts/win-x64/WprHelper.exe -DestinationPath artifacts/release/WprHelper-1.0-win-x64.zip -Force
+          $hash = (Get-FileHash artifacts/release/WprHelper-1.0-win-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  WprHelper-1.0-win-x64.zip" | Set-Content artifacts/release/WprHelper-1.0-win-x64.zip.sha256 -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WprHelper-1.0-win-x64
+          path: |
+            artifacts/release/WprHelper-1.0-win-x64.zip
+            artifacts/release/WprHelper-1.0-win-x64.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-results-and-coverage
+          path: TestResults

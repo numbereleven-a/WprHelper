@@ -1,0 +1,71 @@
+<Window x:Class="WprHelper.App.MainWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="{DynamicResource AppTitle}" Width="980" Height="700" MinWidth="820" MinHeight="580"
+ Icon="Assets/WprHelper.ico" Background="{DynamicResource WindowBackground}" Topmost="{Binding Topmost}">
+ <Grid Margin="18">
+  <Grid.LayoutTransform><ScaleTransform ScaleX="{Binding UiScale}" ScaleY="{Binding UiScale}"/></Grid.LayoutTransform>
+  <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <TabControl Style="{StaticResource MainTabs}">
+   <TabItem Header="{DynamicResource LaunchTab}"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="4,18,18,12">
+    <TextBlock Text="{DynamicResource WprPath}" Style="{StaticResource LabelStyle}"/>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding WprPath,UpdateSourceTrigger=PropertyChanged}"/><Button Grid.Column="1" Content="{DynamicResource Browse}" Command="{Binding BrowseWprCommand}" Style="{StaticResource SecondaryButton}"/></Grid>
+    <TextBlock Text="{Binding WprStatus}" Foreground="{DynamicResource Accent}" Margin="2,5,0,18"/>
+    <TextBlock Text="{DynamicResource TargetPath}" Style="{StaticResource LabelStyle}"/>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding TargetPath,UpdateSourceTrigger=PropertyChanged}"/><Button Grid.Column="1" Content="{DynamicResource Browse}" Command="{Binding BrowseTargetCommand}" Style="{StaticResource SecondaryButton}"/></Grid>
+    <Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{DynamicResource Arguments}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding TargetArguments}"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="{DynamicResource WorkingDirectory}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding WorkingDirectory}"/></StackPanel></Grid>
+    <TextBlock Text="{DynamicResource WorkingDirectoryHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="2,6,0,0"/>
+    <CheckBox Content="{DynamicResource RunElevated}" IsChecked="{Binding RunTargetElevated}" Margin="2,14,0,0"/>
+   </StackPanel></ScrollViewer></TabItem>
+
+   <TabItem Header="{DynamicResource WprTab}"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="4,18,18,12">
+    <TextBlock Text="{DynamicResource WprProfile}" Style="{StaticResource LabelStyle}"/>
+    <ItemsControl ItemsSource="{Binding WprProfileOptions}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate><CheckBox Content="{Binding Name}" IsChecked="{Binding IsSelected}" ToolTip="{Binding Description}" MinWidth="145" Margin="2,5,12,5"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+    <Border Style="{StaticResource ProfileSelectionCard}" Margin="0,10,0,12"><StackPanel><TextBlock Text="{DynamicResource SelectedWprProfiles}" Foreground="{DynamicResource SecondaryText}" Margin="0,0,0,5"/><ItemsControl ItemsSource="{Binding SelectedWprProfileDescriptions}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,2"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
+    <TextBlock Text="{DynamicResource CustomWprProfile}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding CustomWprProfile,UpdateSourceTrigger=PropertyChanged}"/>
+    <TextBlock Text="{DynamicResource WprProfileHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="2,6,0,16"/>
+    <CheckBox Content="{DynamicResource FileMode}" IsChecked="{Binding FileMode}" FontWeight="SemiBold"/>
+    <TextBlock Text="{DynamicResource FileModeHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="24,6,0,16"/>
+    <TextBlock Text="{DynamicResource WprStartArguments}" Style="{StaticResource LabelStyle}"/>
+    <TextBox Text="{Binding WprStartArguments}"/>
+    <Border Style="{StaticResource InfoCard}" Margin="0,16"><TextBlock Text="{DynamicResource WprArgumentsHelp}" TextWrapping="Wrap"/></Border>
+   </StackPanel></ScrollViewer></TabItem>
+
+   <TabItem Header="{DynamicResource StopTab}"><StackPanel Margin="4,18,18,12">
+    <CheckBox Content="{DynamicResource StopAfterTarget}" IsChecked="{Binding StopAfterTargetExit}" FontWeight="SemiBold"/>
+    <TextBlock Text="{DynamicResource StopAfterTargetHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="24,6,0,0"/>
+    <Grid Margin="0,18,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{DynamicResource ExitDelay}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding ExitDelaySeconds,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="{DynamicResource MaxDuration}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding MaximumDurationSeconds,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel></Grid>
+    <TextBlock Text="{DynamicResource FreeReserve}" Style="{StaticResource LabelStyle}" Margin="0,16,0,0"/><TextBox Text="{Binding MinimumFreeGb,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/>
+   </StackPanel></TabItem>
+
+   <TabItem Header="{DynamicResource SaveTab}"><StackPanel Margin="4,18,18,12">
+    <TextBlock Text="{DynamicResource LocalDirectory}" Style="{StaticResource LabelStyle}"/><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding LocalDirectory}"/><Button Grid.Column="1" Content="{DynamicResource Browse}" Command="{Binding BrowseLocalCommand}" Style="{StaticResource SecondaryButton}"/></Grid>
+    <TextBlock Text="{DynamicResource DestinationDirectory}" Style="{StaticResource LabelStyle}" Margin="0,16,0,0"/><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding DestinationDirectory}"/><Button Grid.Column="1" Content="{DynamicResource Browse}" Command="{Binding BrowseDestinationCommand}" Style="{StaticResource SecondaryButton}"/></Grid>
+    <TextBlock Text="{DynamicResource NetworkPathHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="2,6,0,0"/>
+    <TextBlock Text="{DynamicResource FileTemplate}" Style="{StaticResource LabelStyle}" Margin="0,16,0,0"/><TextBox Text="{Binding FileNameTemplate}"/><TextBlock Text="{DynamicResource FileTemplateHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="2,6,0,0"/>
+    <StackPanel Orientation="Horizontal" Margin="0,16,0,0"><CheckBox Content="ETL" IsChecked="True" IsEnabled="False"/></StackPanel><CheckBox Content="{DynamicResource Overwrite}" IsChecked="{Binding OverwriteExisting}" Margin="0,16,0,0"/>
+   </StackPanel></TabItem>
+
+   <TabItem Header="{DynamicResource ProfilesTab}"><Grid Margin="4,14,18,10">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{DynamicResource ProfileName}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding ProfileName}"/></StackPanel><Button Grid.Column="1" Content="{DynamicResource SaveProfile}" Command="{Binding SaveProfileCommand}" Style="{StaticResource PrimaryButton}" VerticalAlignment="Bottom" Margin="12,0,8,0"/><Button Grid.Column="2" Content="{DynamicResource RefreshProfiles}" Command="{Binding RefreshProfilesCommand}" Style="{StaticResource SecondaryButton}" VerticalAlignment="Bottom" Margin="0"/></Grid>
+    <ListBox Grid.Row="1" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile,Mode=TwoWay}" SelectionMode="Single" DisplayMemberPath="Name" Margin="0,12,0,0" MinHeight="80" ToolTip="{Binding DataRoot}"/>
+    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0"><Button Content="{DynamicResource LoadProfile}" Command="{Binding LoadProfileCommand}" Style="{StaticResource PrimaryButton}"/><Button Content="{DynamicResource RenameProfile}" Command="{Binding RenameProfileCommand}" Style="{StaticResource SecondaryButton}" Margin="0"/><Button Content="{DynamicResource ResetSettings}" Command="{Binding ResetSettingsCommand}" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"/></StackPanel>
+    <TextBlock Grid.Row="3" Text="{DynamicResource RenameProfileHelp}" Foreground="{DynamicResource SecondaryText}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+   </Grid></TabItem>
+
+   <TabItem Header="{DynamicResource SettingsTab}"><StackPanel Margin="4,18,18,12" MaxWidth="620" HorizontalAlignment="Left">
+    <TextBlock Text="{DynamicResource Language}" Style="{StaticResource LabelStyle}"/><ComboBox Width="180" HorizontalAlignment="Left" SelectedValue="{Binding Language}" SelectedValuePath="Tag" SelectionChanged="LanguageChanged"><ComboBoxItem Content="{DynamicResource Automatic}" Tag="Automatic"/><ComboBoxItem Content="Русский" Tag="Russian"/><ComboBoxItem Content="English" Tag="English"/></ComboBox>
+    <TextBlock Text="{DynamicResource LanguageHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="0,6,0,18"/>
+    <CheckBox Content="{DynamicResource Topmost}" IsChecked="{Binding Topmost}"/>
+    <CheckBox Content="{DynamicResource ConfirmStop}" IsChecked="{Binding ConfirmStop}" Margin="0,12,0,0"/>
+    <CheckBox Content="{DynamicResource OpenFolderAfterCompletion}" IsChecked="{Binding OpenFolderAfterCompletion}" Margin="0,12,0,0"/>
+    <CheckBox Content="{DynamicResource LoadLastUsedProfile}" IsChecked="{Binding LoadLastUsedProfile}" Margin="0,12,0,0"/>
+    <TextBlock Text="{DynamicResource UiScale}" Style="{StaticResource LabelStyle}" Margin="0,22,0,6"/>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="360"/><ColumnDefinition Width="70"/></Grid.ColumnDefinitions><Slider Minimum="80" Maximum="125" TickFrequency="5" IsSnapToTickEnabled="True" Value="{Binding UiScalePercent}"/><TextBlock Grid.Column="1" Text="{Binding UiScalePercent,StringFormat={}{0:0}%}" VerticalAlignment="Center" Margin="12,0,0,0"/></Grid>
+    <Separator Margin="0,22,0,16"/><StackPanel Orientation="Horizontal"><TextBlock Text="{DynamicResource Version}" Foreground="{DynamicResource SecondaryText}"/><TextBlock Text="{Binding ApplicationVersion}" Foreground="{DynamicResource SecondaryText}" Margin="5,0,0,0"/></StackPanel>
+   </StackPanel></TabItem>
+  </TabControl>
+
+  <Border Grid.Row="1" Style="{StaticResource StatusCard}" Margin="0,14,0,0" MinHeight="250"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="250"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock Text="{Binding StateText}" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryText}"/><TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource SecondaryText}" TextWrapping="Wrap" Margin="0,6,0,0"/></StackPanel><Grid Grid.Column="1" Margin="24,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="82"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions><TextBlock Text="{DynamicResource StartTime}"/><TextBlock Grid.Column="1" Text="{Binding StartTimeText}" FontWeight="SemiBold"/><TextBlock Grid.Row="1" Text="{DynamicResource CaptureTime}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CaptureTimeText}" FontWeight="SemiBold"/><TextBlock Grid.Row="2" Text="{DynamicResource FinishTime}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding FinishTimeText}" FontWeight="SemiBold"/></Grid><StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"><Button Content="{DynamicResource StartCapture}" Command="{Binding StartCommand}" Style="{StaticResource PrimaryButton}"/><Button Content="{DynamicResource StopCapture}" Command="{Binding StopCommand}" Style="{StaticResource DangerButton}"/></StackPanel><Grid Grid.Row="1" Grid.ColumnSpan="3" Margin="0,16,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="155"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock Text="{DynamicResource SavedFile}" FontWeight="SemiBold"/><TextBlock Grid.Column="1" Text="{Binding SavePathText}" TextWrapping="Wrap" VerticalAlignment="Center"/><Button Grid.Column="2" Content="{DynamicResource OpenEtlFolder}" Command="{Binding OpenEtlFolderCommand}" Style="{StaticResource SecondaryButton}" Margin="12,0,0,0" Padding="12,5"/><TextBlock Grid.Row="1" Text="{DynamicResource StopParameters}" FontWeight="SemiBold" Margin="0,7,0,0"/><TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding StopSummaryText}" TextWrapping="Wrap" Margin="0,7,0,0"/><TextBlock Grid.Row="2" Text="{DynamicResource FilterParameters}" FontWeight="SemiBold" Margin="0,7,0,0"/><TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding FilterSummaryText}" TextWrapping="Wrap" Margin="0,7,0,0"/><TextBlock Grid.Row="3" Text="{DynamicResource WprCommand}" FontWeight="SemiBold" Margin="0,7,0,0"/><TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding AppliedWprCommandText}" TextWrapping="Wrap" FontFamily="Consolas" Margin="0,7,0,0"/></Grid><ProgressBar Grid.Row="2" Grid.ColumnSpan="3" Value="{Binding ProgressPercent,Mode=OneWay}" Height="7" Margin="0,16,0,0" Maximum="100"/></Grid></Border>
+ </Grid>
+</Window>
