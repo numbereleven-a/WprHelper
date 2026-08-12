@@ -22,8 +22,6 @@ wpr -stop Application.etl
 - stop manually, after the target exits, after a delay, or at a maximum duration;
 - save ETL files locally or to a UNC path, with an optional second copy;
 - see the exact `wpr.exe` command applied to the current capture;
-- reuse capture settings as named profiles;
-- run as a portable single-file application with English and Russian interfaces.
 
 ## Requirements
 
