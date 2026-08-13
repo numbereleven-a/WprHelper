@@ -166,7 +166,7 @@ public sealed class ElevatedWorkerHost(IWprController wpr, IDiskSpaceService dis
             {
                 try { await SendEventAsync(new WorkerEvent("stopping", expectedSessionId, "Stopping Windows Performance Recorder and saving ETL.", reason), CancellationToken.None); }
                 catch (IOException) { }
-                try { await wpr.StopAsync(start.Profile.WprPath, start.BackingFile, Timeout.InfiniteTimeSpan, CancellationToken.None); }
+                try { await wpr.StopAsync(start.Profile.WprPath, start.BackingFile, start.Profile.SkipPdbGeneration, Timeout.InfiniteTimeSpan, CancellationToken.None); }
                 catch (Exception ex)
                 {
                     reason = StopReason.Error;

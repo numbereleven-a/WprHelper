@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1
+
+- Skip NGEN/PDB generation by default to reduce finalization time and avoid the extra symbol folder.
+- Add a per-profile option to keep managed-code symbols when detailed .NET stacks are required.
+
 ## 1.0
 
 - First public release of WPR Helper.

@@ -6,6 +6,7 @@
   "WprProfile": "CPU",
   "WprProfiles": ["CPU"],
   "FileMode": true,
+  "SkipPdbGeneration": true,
   "WprStartArguments": "",
   "TargetPath": "C:\\Windows\\System32\\notepad.exe",
   "TargetArguments": "",

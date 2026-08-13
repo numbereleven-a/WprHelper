@@ -53,7 +53,9 @@ public sealed class WprCommandBuilder : IWprCommandBuilder
         return result.Append('\\', backslashes * 2).Append('"').ToString();
     }
 
-    public IReadOnlyList<string> BuildStop(string etlPath) => ["-stop", etlPath];
+    public IReadOnlyList<string> BuildStop(string etlPath, bool skipPdbGeneration = true) => skipPdbGeneration
+        ? ["-stop", etlPath, "-skipPdbGen"]
+        : ["-stop", etlPath];
     public IReadOnlyList<string> BuildCancel() => ["-cancel"];
 }
 
@@ -126,10 +128,10 @@ public sealed class WprController(IWprCommandBuilder commandBuilder) : IWprContr
             "Windows Performance Recorder could not start the trace.", cancellationToken);
     }
 
-    public Task StopAsync(string executablePath, string etlPath, TimeSpan timeout, CancellationToken cancellationToken)
+    public Task StopAsync(string executablePath, string etlPath, bool skipPdbGeneration, TimeSpan timeout, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(etlPath)!);
-        return RunAsync(executablePath, commandBuilder.BuildStop(etlPath), timeout,
+        return RunAsync(executablePath, commandBuilder.BuildStop(etlPath, skipPdbGeneration), timeout,
             "Windows Performance Recorder could not stop and save the trace.", cancellationToken);
     }
 

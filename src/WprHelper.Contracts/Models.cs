@@ -35,6 +35,7 @@ public sealed record CaptureProfile
     public string WprProfile { get; init; } = "CPU";
     public IReadOnlyList<string> WprProfiles { get; init; } = [];
     public bool FileMode { get; init; } = true;
+    public bool SkipPdbGeneration { get; init; } = true;
     public string WprStartArguments { get; init; } = string.Empty;
     public string TargetPath { get; init; } = string.Empty;
     public string TargetArguments { get; init; } = string.Empty;

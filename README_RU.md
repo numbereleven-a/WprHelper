@@ -11,7 +11,7 @@ WPR Helper — портативная программа для целевого
 ```text
 wpr -start CPU -filemode
 <запуск выбранной программы>
-wpr -stop Application.etl
+wpr -stop Application.etl -skipPdbGen
 ```
 
 ## Зачем использовать
@@ -22,6 +22,7 @@ wpr -stop Application.etl
 - запись останавливается вручную, после завершения программы, с задержкой или по ограничению времени;
 - ETL можно сохранить в локальную или сетевую UNC-папку и при необходимости сделать вторую копию;
 - в окне видна точная команда `wpr.exe`, применяемая для текущего сбора;
+- по умолчанию отключена генерация NGEN/PDB для ускорения завершения, но её можно включить отдельной опцией для подробных стеков управляемого кода;
 
 ## Требования
 
@@ -42,6 +43,8 @@ wpr -stop Application.etl
 
 После остановки WPR может некоторое время объединять буферы. WPR Helper дожидается завершения `wpr -stop`, показывает итоговый путь и включает кнопку **Открыть папку ETL**.
 
+По умолчанию команда остановки получает ключ `-skipPdbGen`. События ETL сохраняются, а дополнительная папка `capture.etl.NGENPDB` не создаётся, но стеки .NET в WPA могут быть менее подробными. Снимите флажок **Не генерировать NGEN/PDB-символы**, если нужны символы управляемого кода.
+
 ## Профили WPR
 
 Встроенные профили можно объединить в одном сборе. Например, для `CPU`, `DiskIO` и `FileIO` будет сформирована команда:
@@ -58,7 +61,7 @@ wpr -start CPU -start DiskIO -start FileIO -filemode
 
 ## Скачать
 
-[![релиз](https://img.shields.io/github/v/release/numbereleven-a/WprHelper?label=release&style=flat-square)](https://github.com/numbereleven-a/WprHelper/releases/tag/v1.0)
+[![релиз](https://img.shields.io/github/v/release/numbereleven-a/WprHelper?label=release&style=flat-square)](https://github.com/numbereleven-a/WprHelper/releases)
 [![загрузки](https://img.shields.io/github/downloads/numbereleven-a/WprHelper/total?label=downloads&style=flat-square)](https://github.com/numbereleven-a/WprHelper/releases)
 
 Последнюю портативную сборку можно скачать в разделе [GitHub Releases](https://github.com/numbereleven-a/WprHelper/releases).

@@ -11,7 +11,7 @@ Instead of manually coordinating commands and the target application, WPR Helper
 ```text
 wpr -start CPU -filemode
 <launch the selected application>
-wpr -stop Application.etl
+wpr -stop Application.etl -skipPdbGen
 ```
 
 ## Why use it
@@ -22,6 +22,7 @@ wpr -stop Application.etl
 - stop manually, after the target exits, after a delay, or at a maximum duration;
 - save ETL files locally or to a UNC path, with an optional second copy;
 - see the exact `wpr.exe` command applied to the current capture;
+- skip NGEN/PDB generation by default for faster finalization, with an option to keep detailed managed-code symbols;
 
 ## Requirements
 
@@ -42,6 +43,8 @@ The release package is self-contained and does not require a separate .NET insta
 
 WPR may spend some time merging its buffers. WPR Helper waits for `wpr -stop` to finish before showing the final ETL path and enabling **Open ETL folder**.
 
+By default the stop command includes `-skipPdbGen`. This preserves the ETL event data and avoids the additional `capture.etl.NGENPDB` folder, while .NET stacks in WPA may be less detailed. Clear **Skip NGEN/PDB symbol generation** when managed-code symbols are required.
+
 ## WPR profiles
 
 Built-in profiles can be combined in one capture. For example, selecting `CPU`, `DiskIO`, and `FileIO` produces a start command equivalent to:
@@ -58,7 +61,7 @@ Distributed under the [MIT License](LICENSE).
 
 ## Download
 
-[![release](https://img.shields.io/github/v/release/numbereleven-a/WprHelper?label=release&style=flat-square)](https://github.com/numbereleven-a/WprHelper/releases/tag/v1.0)
+[![release](https://img.shields.io/github/v/release/numbereleven-a/WprHelper?label=release&style=flat-square)](https://github.com/numbereleven-a/WprHelper/releases)
 [![downloads](https://img.shields.io/github/downloads/numbereleven-a/WprHelper/total?label=downloads&style=flat-square)](https://github.com/numbereleven-a/WprHelper/releases)
 
 Download the latest portable build from [GitHub Releases](https://github.com/numbereleven-a/WprHelper/releases).

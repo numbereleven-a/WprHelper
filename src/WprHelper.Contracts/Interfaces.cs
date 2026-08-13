@@ -4,7 +4,7 @@ public interface IWprCommandBuilder
 {
     IReadOnlyList<string> BuildStart(CaptureProfile profile);
     string FormatStart(CaptureProfile profile);
-    IReadOnlyList<string> BuildStop(string etlPath);
+    IReadOnlyList<string> BuildStop(string etlPath, bool skipPdbGeneration = true);
     IReadOnlyList<string> BuildCancel();
 }
 
@@ -16,7 +16,7 @@ public interface IWprCapabilityDetector
 public interface IWprController
 {
     Task StartAsync(CaptureProfile profile, TimeSpan timeout, CancellationToken cancellationToken);
-    Task StopAsync(string executablePath, string etlPath, TimeSpan timeout, CancellationToken cancellationToken);
+    Task StopAsync(string executablePath, string etlPath, bool skipPdbGeneration, TimeSpan timeout, CancellationToken cancellationToken);
     Task CancelAsync(string executablePath, TimeSpan timeout, CancellationToken cancellationToken);
 }
 

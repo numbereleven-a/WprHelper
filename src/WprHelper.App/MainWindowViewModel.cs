@@ -74,7 +74,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string DataRoot { get; }
     public string ApplicationVersion { get; } = Assembly.GetEntryAssembly()?.GetName().Version is { } version
         ? $"{version.Major}.{version.Minor}"
-        : "1.0";
+        : "1.1";
     public ObservableCollection<CaptureProfile> Profiles { get; } = [];
     public ObservableCollection<WprProfileOption> WprProfileOptions { get; } = [];
     public ObservableCollection<string> SelectedWprProfileDescriptions { get; } = [];
@@ -95,6 +95,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string WprStatus { get => Get(LocalizationService.Get("NoWpr")); private set => Set(value); }
     public string CustomWprProfile { get => Get(string.Empty); set { Set(value); RefreshSelectedWprProfileDescriptions(); } }
     public bool FileMode { get => Get(true); set => Set(value); }
+    public bool SkipPdbGeneration { get => Get(true); set => Set(value); }
     public string WprStartArguments { get => Get(string.Empty); set => Set(value); }
     public string TargetPath { get => Get(string.Empty); set { Set(value); OnPropertyChanged(nameof(TargetExecutableName)); } }
     public string TargetExecutableName => string.IsNullOrWhiteSpace(TargetPath) ? LocalizationService.Get("TargetNotSelected") : Path.GetFileName(TargetPath);
@@ -182,6 +183,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             WprProfile = selectedProfiles.Count > 0 ? selectedProfiles[0] : string.Empty,
             WprProfiles = selectedProfiles,
             FileMode = FileMode,
+            SkipPdbGeneration = SkipPdbGeneration,
             WprStartArguments = WprStartArguments,
             TargetArguments = TargetArguments,
             WorkingDirectory = WorkingDirectory,
@@ -209,7 +211,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             $"{LocalizationService.Get("DurationConditionShort")}: {duration}; " +
             $"{LocalizationService.Get("FreeReserveShort")}: {FormatSize(profile.Stop.MinimumFreeBytes)}";
         var selectedProfiles = profile.WprProfiles.Count > 0 ? profile.WprProfiles : [profile.WprProfile];
-        FilterSummaryText = $"{string.Join(", ", selectedProfiles)}; {(profile.FileMode ? "-filemode" : "memory mode")}" +
+        FilterSummaryText = $"{string.Join(", ", selectedProfiles)}; {(profile.FileMode ? "-filemode" : "memory mode")}; " +
+            $"{(profile.SkipPdbGeneration ? "-skipPdbGen" : "NGEN/PDB symbols")}" +
             (string.IsNullOrWhiteSpace(profile.WprStartArguments) ? string.Empty : $"; {profile.WprStartArguments}");
         AppliedWprCommandText = _wprCommands.FormatStart(profile);
     }
@@ -278,6 +281,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         WprPath = p.WprPath;
         SetSelectedWprProfiles(p.WprProfiles.Count > 0 ? p.WprProfiles : [p.WprProfile]);
         FileMode = p.FileMode;
+        SkipPdbGeneration = p.SkipPdbGeneration;
         WprStartArguments = p.WprStartArguments;
         TargetPath = p.TargetPath;
         TargetArguments = p.TargetArguments;
@@ -321,6 +325,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             WprPath = WprExecutableLocator.FindPreferred();
             SetSelectedWprProfiles(["CPU"]);
             FileMode = true;
+            SkipPdbGeneration = true;
             WprStartArguments = string.Empty;
             TargetPath = string.Empty;
             TargetArguments = string.Empty;

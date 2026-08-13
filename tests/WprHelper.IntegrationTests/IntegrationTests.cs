@@ -50,7 +50,7 @@ public sealed class RealWprSmokeTests
         {
             await controller.StartAsync(profile, TimeSpan.FromSeconds(30), CancellationToken.None);
             await Task.Delay(1500);
-            await controller.StopAsync(wprPath, etl, TimeSpan.FromMinutes(2), CancellationToken.None);
+            await controller.StopAsync(wprPath, etl, true, TimeSpan.FromMinutes(2), CancellationToken.None);
         }
         catch
         {

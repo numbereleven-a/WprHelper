@@ -55,7 +55,8 @@ public sealed class WprCommandBuilderTests
     [Fact]
     public void StopAndCancelUseWprSyntax()
     {
-        Assert.Equal(new[] { "-stop", @"C:\logs\trace.etl" }, _builder.BuildStop(@"C:\logs\trace.etl"));
+        Assert.Equal(new[] { "-stop", @"C:\logs\trace.etl", "-skipPdbGen" }, _builder.BuildStop(@"C:\logs\trace.etl"));
+        Assert.Equal(new[] { "-stop", @"C:\logs\trace.etl" }, _builder.BuildStop(@"C:\logs\trace.etl", skipPdbGeneration: false));
         Assert.Equal(new[] { "-cancel" }, _builder.BuildCancel());
     }
 }
@@ -252,7 +253,7 @@ public sealed class WorkerProtocolTests
     {
         public Task StartAsync(CaptureProfile profile, TimeSpan timeout, CancellationToken token) =>
             throw new InvalidOperationException("expected root cause");
-        public Task StopAsync(string path, string etl, TimeSpan timeout, CancellationToken token) => Task.CompletedTask;
+        public Task StopAsync(string path, string etl, bool skipPdbGeneration, TimeSpan timeout, CancellationToken token) => Task.CompletedTask;
         public Task CancelAsync(string path, TimeSpan timeout, CancellationToken token) => Task.CompletedTask;
     }
 }

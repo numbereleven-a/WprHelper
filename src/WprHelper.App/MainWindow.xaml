@@ -25,6 +25,8 @@
     <TextBlock Text="{DynamicResource WprProfileHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="2,6,0,16"/>
     <CheckBox Content="{DynamicResource FileMode}" IsChecked="{Binding FileMode}" FontWeight="SemiBold"/>
     <TextBlock Text="{DynamicResource FileModeHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="24,6,0,16"/>
+    <CheckBox Content="{DynamicResource SkipPdbGeneration}" IsChecked="{Binding SkipPdbGeneration}" FontWeight="SemiBold"/>
+    <TextBlock Text="{DynamicResource SkipPdbGenerationHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="24,6,0,16"/>
     <TextBlock Text="{DynamicResource WprStartArguments}" Style="{StaticResource LabelStyle}"/>
     <TextBox Text="{Binding WprStartArguments}"/>
     <Border Style="{StaticResource InfoCard}" Margin="0,16"><TextBlock Text="{DynamicResource WprArgumentsHelp}" TextWrapping="Wrap"/></Border>
