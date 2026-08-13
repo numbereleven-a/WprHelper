@@ -34,7 +34,11 @@ public sealed class SessionManager(
         var captureTimestamp = clock.Now;
         var initialContext = new FileNameContext(Path.GetFileNameWithoutExtension(profile.TargetPath), profile.Name, sessionId, null, captureTimestamp);
         var baseName = FileNameTemplate.Expand(profile.FileNameTemplate, initialContext);
-        var backingFile = Path.Combine(sessionDirectory, "wpr", "capture.etl");
+        // Write the WPR result directly to the selected local directory. Keeping the
+        // final path from the start avoids a second read/copy through the session
+        // directory, which can expose a short-lived file-system visibility gap on
+        // virtual machines and redirected storage.
+        var backingFile = FileNameTemplate.GetUniquePath(captureDirectory, baseName, ".etl");
         if (disk.GetFreeBytes(captureDirectory) <= profile.Stop.MinimumFreeBytes || disk.GetFreeBytes(sessionDirectory) <= profile.Stop.MinimumFreeBytes)
             throw new IOException("Available disk space is below the configured reserve.");
         machine.TransitionTo(CaptureState.Preparing);
@@ -94,16 +98,7 @@ public sealed class SessionManager(
             record = record with { State = CaptureState.Finalizing, TargetPid = capture.TargetPid, StopReason = capture.Reason, CaptureStartedAt = capture.CaptureStartedAt };
             await sessions.SaveAsync(record, CancellationToken.None);
 
-            var etlFiles = Directory.EnumerateFiles(Path.GetDirectoryName(backingFile)!, "*.etl").OrderBy(SegmentNumber).ThenBy(x => x).ToList();
-            if (etlFiles.Count == 0 || etlFiles.Sum(x => new FileInfo(x).Length) == 0)
-                throw new IOException("Windows Performance Recorder did not produce a non-empty ETL file.");
-            var files = new List<string>();
-            for (var index = 0; index < etlFiles.Count; index++)
-            {
-                var suffix = etlFiles.Count > 1 ? $"_{index + 1:000}" : string.Empty;
-                var target = FileNameTemplate.GetUniquePath(captureDirectory, baseName + suffix, ".etl");
-                files.Add(await transfer.CopyAtomicAsync(etlFiles[index], target, overwrite: false, null, CancellationToken.None));
-            }
+            var files = new List<string> { await WaitForTraceAsync(backingFile) };
             var warnings = record.Warnings.ToList();
             if (!string.IsNullOrWhiteSpace(profile.DestinationDirectory))
             {
@@ -147,11 +142,32 @@ public sealed class SessionManager(
 
     public static string NormalizeDestination(string path) => path.StartsWith("//", StringComparison.Ordinal) ? "\\\\" + path[2..].Replace('/', '\\') : path;
 
-    private static int SegmentNumber(string path)
+    private static async Task<string> WaitForTraceAsync(string path)
     {
-        var name = Path.GetFileNameWithoutExtension(path);
-        var digits = new string(name.Reverse().TakeWhile(char.IsDigit).Reverse().ToArray());
-        return int.TryParse(digits, out var number) ? number : 0;
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(60);
+        Exception? lastError = null;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    var length = new FileInfo(path).Length;
+                    if (length > 0) return path;
+                    lastError = new IOException("The ETL file exists but is still empty.");
+                }
+                else
+                {
+                    lastError = new FileNotFoundException("The ETL file has not appeared yet.", path);
+                }
+            }
+            catch (IOException ex) { lastError = ex; }
+            catch (UnauthorizedAccessException ex) { lastError = ex; }
+
+            await Task.Delay(250);
+        }
+
+        throw new IOException("Windows Performance Recorder did not produce a readable non-empty ETL file.", lastError);
     }
 
     private static Task AppendLogAsync(string path, string message)

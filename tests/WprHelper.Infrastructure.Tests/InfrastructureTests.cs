@@ -200,7 +200,7 @@ public sealed class StorageTests : IDisposable
         var paths = new StoragePathResolver(_root);
         var sessionDirectory = paths.CreateSessionDirectory(Guid.NewGuid());
         var administratorsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
-        var rules = new DirectoryInfo(Path.Combine(sessionDirectory, "wpr")).GetAccessControl()
+        var rules = new DirectoryInfo(sessionDirectory).GetAccessControl()
             .GetAccessRules(true, true, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>();
         Assert.Contains(rules, rule => administratorsSid.Equals(rule.IdentityReference) &&
             rule.AccessControlType == AccessControlType.Allow &&
@@ -287,6 +287,8 @@ public sealed class SessionManagerTests : IDisposable
         var result = await manager.CaptureAsync(profile, null, CancellationToken.None);
         Assert.Equal(CaptureState.Completed, result.Session.State);
         Assert.Single(result.Files.Where(x => Path.GetExtension(x).Equals(".etl", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(Path.GetFullPath(result.Session.BackingFile), Path.GetFullPath(result.Files.Single(x => x.EndsWith(".etl", StringComparison.OrdinalIgnoreCase))));
+        Assert.Equal(Path.GetFullPath(profile.LocalDirectory), Path.GetDirectoryName(Path.GetFullPath(result.Session.BackingFile)));
     }
 
     [Fact]

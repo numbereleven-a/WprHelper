@@ -4,6 +4,7 @@
 
 - Skip NGEN/PDB generation by default to reduce finalization time and avoid the extra symbol folder.
 - Add a per-profile option to keep managed-code symbols when detailed .NET stacks are required.
+- Write the primary ETL directly to the selected save directory instead of copying it from the session folder.
 
 ## 1.0
 
