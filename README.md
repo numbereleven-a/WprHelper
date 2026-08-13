@@ -21,6 +21,7 @@ wpr -stop Application.etl -skipPdbGen
 - use custom `.wprp` profiles alongside built-in profiles;
 - stop manually, after the target exits, after a delay, or at a maximum duration;
 - save ETL files locally or to a UNC path, with an optional second copy;
+- write the primary ETL directly to the selected save directory, avoiding a fragile post-capture copy from a temporary session path;
 - see the exact `wpr.exe` command applied to the current capture;
 - skip NGEN/PDB generation by default for faster finalization, with an option to keep detailed managed-code symbols;
 

@@ -34,7 +34,6 @@ public sealed class StoragePathResolver : IStoragePathResolver
         var root = Path.Combine(SessionsRoot, sessionId.ToString("N"));
         Directory.CreateDirectory(root);
         GrantSessionAccess(root);
-        Directory.CreateDirectory(Path.Combine(root, "wpr"));
         Directory.CreateDirectory(Path.Combine(root, "export"));
         Directory.CreateDirectory(Path.Combine(root, "logs"));
         return root;
