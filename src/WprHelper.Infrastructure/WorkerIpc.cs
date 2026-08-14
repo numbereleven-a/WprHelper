@@ -93,6 +93,7 @@ public sealed class ElevatedWorkerHost(IWprController wpr, IDiskSpaceService dis
             Task? progressWrite = null;
             await wpr.StartAsync(start.Profile, TimeSpan.FromSeconds(30), cancellationToken);
             wprStarted = true;
+            lastClientContact = Stopwatch.GetTimestamp();
             startedAt = clock.Now;
             await SendEventAsync(new WorkerEvent("started", start.SessionId, "Windows Performance Recorder started."), cancellationToken);
             await SendEventAsync(new WorkerEvent("ready", start.SessionId, "Windows Performance Recorder is recording."), cancellationToken);
@@ -144,7 +145,12 @@ public sealed class ElevatedWorkerHost(IWprController wpr, IDiskSpaceService dis
                     ? evaluator.Evaluate(start.Profile.Stop, elapsed, 0, freeBytes, targetExited, targetExitedAt is null ? null : clock.Now - targetExitedAt)
                     : reason;
                 if (progressWrite is null || progressWrite.IsCompleted)
-                    progressWrite = SendEventAsync(new WorkerEvent("progress", start.SessionId, targetPid is null ? "Waiting for target application." : "Recording performance trace", reason, 0, freeBytes), cancellationToken);
+                {
+                    var progressMessage = start.Profile.LaunchTargetApplication && targetPid is null
+                        ? "Waiting for target application."
+                        : "Recording performance trace";
+                    progressWrite = SendEventAsync(new WorkerEvent("progress", start.SessionId, progressMessage, reason, 0, freeBytes), cancellationToken);
+                }
             }
 
             if (progressWrite is not null)
@@ -167,10 +173,20 @@ public sealed class ElevatedWorkerHost(IWprController wpr, IDiskSpaceService dis
                 try { await SendEventAsync(new WorkerEvent("stopping", expectedSessionId, "Stopping Windows Performance Recorder and saving ETL.", reason), CancellationToken.None); }
                 catch (IOException) { }
                 try { await wpr.StopAsync(start.Profile.WprPath, start.BackingFile, start.Profile.SkipPdbGeneration, Timeout.InfiniteTimeSpan, CancellationToken.None); }
-                catch (Exception ex)
+                catch (Exception stopException)
                 {
                     reason = StopReason.Error;
-                    error = error is null ? $"Windows Performance Recorder could not save the trace: {ex.Message}" : $"{error} Windows Performance Recorder could not save the trace: {ex.Message}";
+                    error = error is null
+                        ? $"Windows Performance Recorder could not save the trace: {stopException.Message}"
+                        : $"{error} Windows Performance Recorder could not save the trace: {stopException.Message}";
+                    try
+                    {
+                        await wpr.CancelAsync(start.Profile.WprPath, TimeSpan.FromSeconds(30), CancellationToken.None);
+                    }
+                    catch (Exception cancelException)
+                    {
+                        error = $"{error} Emergency cleanup also failed: {cancelException.Message}";
+                    }
                 }
             }
         }
@@ -278,7 +294,6 @@ public sealed class ElevatedWorkerClient(ITargetProcessLauncher targetLauncher, 
 
         var started = DateTimeOffset.Now;
         progress?.Report(new(CaptureState.WaitingForWpr, evt.Message, TimeSpan.Zero, 0, 0, null));
-        progress?.Report(new(CaptureState.LaunchingTarget, "Launching target application.", TimeSpan.Zero, 0, 0, null));
         using var writeGate = new SemaphoreSlim(1, 1);
         async Task SendAsync(WorkerCommand command)
         {
@@ -295,20 +310,24 @@ public sealed class ElevatedWorkerClient(ITargetProcessLauncher targetLauncher, 
                 await SendAsync(new HeartbeatCommand(sessionId));
             }
         }, heartbeatCts.Token);
-        TrackedTargetProcess target;
+        TrackedTargetProcess? target = null;
         try
         {
-            try
+            if (profile.LaunchTargetApplication)
             {
-                target = await Task.Run(() => targetLauncher.LaunchAsync(profile, cancellationToken), CancellationToken.None);
-                await SendAsync(new SetTargetPidCommand(sessionId, target.Pid, target.StartedAt));
+                progress?.Report(new(CaptureState.LaunchingTarget, "Launching target application.", TimeSpan.Zero, 0, 0, null));
+                try
+                {
+                    target = await Task.Run(() => targetLauncher.LaunchAsync(profile, cancellationToken), CancellationToken.None);
+                    await SendAsync(new SetTargetPidCommand(sessionId, target.Pid, target.StartedAt));
+                }
+                catch
+                {
+                    try { await SendAsync(new StopCaptureCommand(sessionId, StopReason.Error)); } catch (IOException) { }
+                    throw;
+                }
             }
-            catch
-            {
-                try { await SendAsync(new StopCaptureCommand(sessionId, StopReason.Error)); } catch (IOException) { }
-                throw;
-            }
-            progress?.Report(new(CaptureState.Capturing, "Capturing", TimeSpan.Zero, 0, 0, target.Pid));
+            progress?.Report(new(CaptureState.Capturing, "Capturing", TimeSpan.Zero, 0, 0, target?.Pid));
             var stopSent = false;
             var read = PipeJson.ReadAsync<WorkerEvent>(reader, CancellationToken.None);
             while (true)
@@ -330,16 +349,17 @@ public sealed class ElevatedWorkerClient(ITargetProcessLauncher targetLauncher, 
                     continue;
                 }
                 evt = await read ?? throw new IOException("Elevated worker disconnected.");
-                read = PipeJson.ReadAsync<WorkerEvent>(reader, CancellationToken.None);
                 if (evt.Kind == "error") throw new InvalidOperationException(evt.Message);
                 if (evt.Kind == "stopping")
                 {
-                    progress?.Report(new(CaptureState.StoppingWpr, evt.Message, DateTimeOffset.Now - started, evt.EtlBytes, evt.FreeBytes, target.Pid, evt.StopReason));
+                    progress?.Report(new(CaptureState.StoppingWpr, evt.Message, DateTimeOffset.Now - started, evt.EtlBytes, evt.FreeBytes, target?.Pid, evt.StopReason));
+                    read = PipeJson.ReadAsync<WorkerEvent>(reader, CancellationToken.None);
                     continue;
                 }
                 if (evt.Kind == "stopped")
-                    return new(target.Pid, evt.StopReason, started);
-                progress?.Report(new(CaptureState.Capturing, evt.Message, DateTimeOffset.Now - started, evt.EtlBytes, evt.FreeBytes, target.Pid, evt.StopReason));
+                    return new(target?.Pid, evt.StopReason, started);
+                progress?.Report(new(CaptureState.Capturing, evt.Message, DateTimeOffset.Now - started, evt.EtlBytes, evt.FreeBytes, target?.Pid, evt.StopReason));
+                read = PipeJson.ReadAsync<WorkerEvent>(reader, CancellationToken.None);
             }
         }
         finally

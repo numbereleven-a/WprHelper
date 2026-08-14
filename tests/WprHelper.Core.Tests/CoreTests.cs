@@ -15,6 +15,15 @@ public sealed class StateMachineTests
     }
 
     [Fact]
+    public void LifecycleWithoutTargetLaunch_IsAccepted()
+    {
+        var state = new CaptureStateMachine();
+        foreach (var next in new[] { CaptureState.Validating, CaptureState.Preparing, CaptureState.WaitingForElevation, CaptureState.StartingWpr, CaptureState.WaitingForWpr, CaptureState.Capturing, CaptureState.StopRequested, CaptureState.StoppingWpr, CaptureState.Finalizing, CaptureState.Completed })
+            state.TransitionTo(next);
+        Assert.Equal(CaptureState.Completed, state.State);
+    }
+
+    [Fact]
     public void InvalidTransition_IsRejected() => Assert.Throws<InvalidOperationException>(() => new CaptureStateMachine().TransitionTo(CaptureState.Capturing));
 }
 

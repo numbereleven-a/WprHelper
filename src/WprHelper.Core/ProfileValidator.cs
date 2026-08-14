@@ -42,12 +42,19 @@ public sealed class ProfileValidator
                 @"(^|\s)-(start|stop|cancel)(\s|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
             issues.Add(new(nameof(profile.WprStartArguments), "Additional arguments cannot contain -start, -stop, or -cancel."));
 
-        if (!File.Exists(profile.TargetPath))
-            issues.Add(new(nameof(profile.TargetPath), "Target executable does not exist."));
-        else if (!string.Equals(Path.GetExtension(profile.TargetPath), ".exe", StringComparison.OrdinalIgnoreCase) || !IsPortableExecutable(profile.TargetPath))
-            issues.Add(new(nameof(profile.TargetPath), "Target must be a Windows PE executable (.exe), not a script, shortcut, or document."));
-        if (!string.IsNullOrWhiteSpace(profile.WorkingDirectory) && !Directory.Exists(profile.WorkingDirectory))
-            issues.Add(new(nameof(profile.WorkingDirectory), "Working directory does not exist."));
+        if (profile.LaunchTargetApplication)
+        {
+            if (!File.Exists(profile.TargetPath))
+                issues.Add(new(nameof(profile.TargetPath), "Target executable does not exist."));
+            else if (!string.Equals(Path.GetExtension(profile.TargetPath), ".exe", StringComparison.OrdinalIgnoreCase) || !IsPortableExecutable(profile.TargetPath))
+                issues.Add(new(nameof(profile.TargetPath), "Target must be a Windows PE executable (.exe), not a script, shortcut, or document."));
+            if (!string.IsNullOrWhiteSpace(profile.WorkingDirectory) && !Directory.Exists(profile.WorkingDirectory))
+                issues.Add(new(nameof(profile.WorkingDirectory), "Working directory does not exist."));
+        }
+        else if (stop.StopAfterTargetExit)
+        {
+            issues.Add(new("Stop.StopAfterTargetExit", "Target-exit stopping cannot be enabled when no target application is launched."));
+        }
         var localDirectory = NormalizeNetworkPath(profile.LocalDirectory);
         var destinationDirectory = NormalizeNetworkPath(profile.DestinationDirectory);
         if (!string.IsNullOrWhiteSpace(localDirectory) && !Path.IsPathFullyQualified(localDirectory))

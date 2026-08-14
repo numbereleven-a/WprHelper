@@ -10,11 +10,15 @@
     <TextBlock Text="{DynamicResource WprPath}" Style="{StaticResource LabelStyle}"/>
     <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding WprPath,UpdateSourceTrigger=PropertyChanged}"/><Button Grid.Column="1" Content="{DynamicResource Browse}" Command="{Binding BrowseWprCommand}" Style="{StaticResource SecondaryButton}"/></Grid>
     <TextBlock Text="{Binding WprStatus}" Foreground="{DynamicResource Accent}" Margin="2,5,0,18"/>
-    <TextBlock Text="{DynamicResource TargetPath}" Style="{StaticResource LabelStyle}"/>
-    <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding TargetPath,UpdateSourceTrigger=PropertyChanged}"/><Button Grid.Column="1" Content="{DynamicResource Browse}" Command="{Binding BrowseTargetCommand}" Style="{StaticResource SecondaryButton}"/></Grid>
-    <Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{DynamicResource Arguments}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding TargetArguments}"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="{DynamicResource WorkingDirectory}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding WorkingDirectory}"/></StackPanel></Grid>
-    <TextBlock Text="{DynamicResource WorkingDirectoryHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="2,6,0,0"/>
-    <CheckBox Content="{DynamicResource RunElevated}" IsChecked="{Binding RunTargetElevated}" Margin="2,14,0,0"/>
+    <CheckBox Content="{DynamicResource LaunchTargetApplication}" IsChecked="{Binding LaunchTargetApplication}" FontWeight="SemiBold"/>
+    <TextBlock Text="{DynamicResource LaunchTargetApplicationHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="24,6,0,14"/>
+    <StackPanel IsEnabled="{Binding LaunchTargetApplication}">
+     <TextBlock Text="{DynamicResource TargetPath}" Style="{StaticResource LabelStyle}"/>
+     <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding TargetPath,UpdateSourceTrigger=PropertyChanged}"/><Button Grid.Column="1" Content="{DynamicResource Browse}" Command="{Binding BrowseTargetCommand}" Style="{StaticResource SecondaryButton}"/></Grid>
+     <Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{DynamicResource Arguments}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding TargetArguments}"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="{DynamicResource WorkingDirectory}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding WorkingDirectory}"/></StackPanel></Grid>
+     <TextBlock Text="{DynamicResource WorkingDirectoryHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="2,6,0,0"/>
+     <CheckBox Content="{DynamicResource RunElevated}" IsChecked="{Binding RunTargetElevated}" Margin="2,14,0,0"/>
+    </StackPanel>
    </StackPanel></ScrollViewer></TabItem>
 
    <TabItem Header="{DynamicResource WprTab}"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="4,18,18,12">
@@ -33,9 +37,8 @@
    </StackPanel></ScrollViewer></TabItem>
 
    <TabItem Header="{DynamicResource StopTab}"><StackPanel Margin="4,18,18,12">
-    <CheckBox Content="{DynamicResource StopAfterTarget}" IsChecked="{Binding StopAfterTargetExit}" FontWeight="SemiBold"/>
-    <TextBlock Text="{DynamicResource StopAfterTargetHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="24,6,0,0"/>
-    <Grid Margin="0,18,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{DynamicResource ExitDelay}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding ExitDelaySeconds,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="{DynamicResource MaxDuration}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding MaximumDurationSeconds,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel></Grid>
+    <StackPanel IsEnabled="{Binding LaunchTargetApplication}"><CheckBox Content="{DynamicResource StopAfterTarget}" IsChecked="{Binding StopAfterTargetExit}" FontWeight="SemiBold"/><TextBlock Text="{DynamicResource StopAfterTargetHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="24,6,0,0"/></StackPanel>
+    <Grid Margin="0,18,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel IsEnabled="{Binding LaunchTargetApplication}"><TextBlock Text="{DynamicResource ExitDelay}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding ExitDelaySeconds,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="{DynamicResource MaxDuration}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding MaximumDurationSeconds,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel></Grid>
     <TextBlock Text="{DynamicResource FreeReserve}" Style="{StaticResource LabelStyle}" Margin="0,16,0,0"/><TextBox Text="{Binding MinimumFreeGb,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/>
    </StackPanel></TabItem>
 

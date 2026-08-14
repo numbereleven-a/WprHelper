@@ -33,6 +33,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly string _settingsPath;
     private bool _settingsInitialized;
     private string? _lastUsedProfileName;
+    private bool _stopAfterTargetExitBeforeSystemCapture = true;
 
     public MainWindowViewModel(ISessionManager sessions, IProfileRepository profiles, IStoragePathResolver paths,
         IWprCommandBuilder wprCommands)
@@ -42,6 +43,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OpenEtlFolderCommand = new RelayCommand(OpenEtlFolder, CanOpenEtlFolder);
         LocalDirectory = Path.Combine(paths.DataRoot, "Captures");
         Directory.CreateDirectory(LocalDirectory);
+        WprPath = WprExecutableLocator.FindPreferred();
         _statusMessage = LocalizationService.Get("Ready"); _stateText = CaptureState.Idle.ToString();
         InitializeWprProfileOptions(["CPU"]);
         BrowseWprCommand = new RelayCommand(() => WprPath = PickExecutable(WprPath, "wpr.exe") ?? WprPath);
@@ -56,7 +58,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         RenameProfileCommand = new AsyncRelayCommand(RenameSelectedProfileAsync, CanRenameSelectedProfile, HandleCommandError);
         ResetSettingsCommand = new RelayCommand(ResetSettings, () => !IsRunning);
         LoadApplicationSettings();
-        WprStatus = File.Exists(WprPath) ? "wpr.exe" : LocalizationService.Get("NoWpr");
         _settingsInitialized = true;
     }
 
@@ -74,7 +75,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string DataRoot { get; }
     public string ApplicationVersion { get; } = Assembly.GetEntryAssembly()?.GetName().Version is { } version
         ? $"{version.Major}.{version.Minor}"
-        : "1.1";
+        : "1.2";
     public ObservableCollection<CaptureProfile> Profiles { get; } = [];
     public ObservableCollection<WprProfileOption> WprProfileOptions { get; } = [];
     public ObservableCollection<string> SelectedWprProfileDescriptions { get; } = [];
@@ -91,12 +92,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public AsyncRelayCommand RenameProfileCommand { get; }
     public RelayCommand ResetSettingsCommand { get; }
 
-    public string WprPath { get => Get(WprExecutableLocator.FindPreferred()); set { Set(value); WprStatus = File.Exists(value) && string.Equals(Path.GetFileName(value), "wpr.exe", StringComparison.OrdinalIgnoreCase) ? $"wpr.exe ({FileVersionInfo.GetVersionInfo(value).FileVersion})" : LocalizationService.Get("NoWpr"); } }
+    public string WprPath { get => Get(string.Empty); set { Set(value); WprStatus = DescribeWpr(value); } }
     public string WprStatus { get => Get(LocalizationService.Get("NoWpr")); private set => Set(value); }
     public string CustomWprProfile { get => Get(string.Empty); set { Set(value); RefreshSelectedWprProfileDescriptions(); } }
     public bool FileMode { get => Get(true); set => Set(value); }
     public bool SkipPdbGeneration { get => Get(true); set => Set(value); }
     public string WprStartArguments { get => Get(string.Empty); set => Set(value); }
+    public bool LaunchTargetApplication
+    {
+        get => Get(true);
+        set
+        {
+            if (LaunchTargetApplication == value) return;
+            if (!value) _stopAfterTargetExitBeforeSystemCapture = StopAfterTargetExit;
+            Set(value);
+            StopAfterTargetExit = value ? _stopAfterTargetExitBeforeSystemCapture : false;
+        }
+    }
     public string TargetPath { get => Get(string.Empty); set { Set(value); OnPropertyChanged(nameof(TargetExecutableName)); } }
     public string TargetExecutableName => string.IsNullOrWhiteSpace(TargetPath) ? LocalizationService.Get("TargetNotSelected") : Path.GetFileName(TargetPath);
     public string TargetArguments { get => Get(string.Empty); set => Set(value); }
@@ -185,10 +197,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             FileMode = FileMode,
             SkipPdbGeneration = SkipPdbGeneration,
             WprStartArguments = WprStartArguments,
+            LaunchTargetApplication = LaunchTargetApplication,
             TargetArguments = TargetArguments,
             WorkingDirectory = WorkingDirectory,
             RunTargetElevated = RunTargetElevated,
-            Stop = new StopOptions { StopAfterTargetExit = StopAfterTargetExit, TargetExitDelay = TimeSpan.FromSeconds(ExitDelaySeconds ?? 0), MaximumDuration = MaximumDurationSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null, MinimumFreeBytes = checked((long)(MinimumFreeGb * 1024 * 1024 * 1024)) },
+            Stop = new StopOptions { StopAfterTargetExit = LaunchTargetApplication && StopAfterTargetExit, TargetExitDelay = LaunchTargetApplication ? TimeSpan.FromSeconds(ExitDelaySeconds ?? 0) : TimeSpan.Zero, MaximumDuration = MaximumDurationSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null, MinimumFreeBytes = checked((long)(MinimumFreeGb * 1024 * 1024 * 1024)) },
             LocalDirectory = SessionManager.NormalizeDestination(LocalDirectory),
             DestinationDirectory = SessionManager.NormalizeDestination(DestinationDirectory),
             FileNameTemplate = FileNameTemplate,
@@ -287,7 +300,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         TargetArguments = p.TargetArguments;
         WorkingDirectory = p.WorkingDirectory;
         RunTargetElevated = p.RunTargetElevated;
-        StopAfterTargetExit = p.Stop.StopAfterTargetExit;
+        _stopAfterTargetExitBeforeSystemCapture = p.Stop.StopAfterTargetExit;
+        LaunchTargetApplication = p.LaunchTargetApplication;
+        StopAfterTargetExit = p.LaunchTargetApplication && p.Stop.StopAfterTargetExit;
         ExitDelaySeconds = p.Stop.TargetExitDelay.TotalSeconds;
         MaximumDurationSeconds = p.Stop.MaximumDuration?.TotalSeconds;
         MinimumFreeGb = p.Stop.MinimumFreeBytes / (1024d * 1024 * 1024);
@@ -327,6 +342,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             FileMode = true;
             SkipPdbGeneration = true;
             WprStartArguments = string.Empty;
+            _stopAfterTargetExitBeforeSystemCapture = true;
+            LaunchTargetApplication = true;
             TargetPath = string.Empty;
             TargetArguments = string.Empty;
             WorkingDirectory = string.Empty;
@@ -431,10 +448,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _ => "WprProfileDescriptionOther"
     };
     private static string FormatSize(long value) => value >= 1024 * 1024 * 1024 ? $"{value / (1024d * 1024 * 1024):0.00} GB" : value >= 1024 * 1024 ? $"{value / (1024d * 1024):0.0} MB" : $"{value / 1024d:0} KB";
+    private static string DescribeWpr(string path) => File.Exists(path) && string.Equals(Path.GetFileName(path), "wpr.exe", StringComparison.OrdinalIgnoreCase)
+        ? $"wpr.exe ({FileVersionInfo.GetVersionInfo(path).FileVersion})"
+        : LocalizationService.Get("NoWpr");
     private void HandleCommandError(Exception ex) => StatusMessage = ex.Message;
     private void RefreshLocalizedValues()
     {
-        WprStatus = File.Exists(WprPath) ? "wpr.exe" : LocalizationService.Get("NoWpr");
+        WprStatus = DescribeWpr(WprPath);
         var selected = GetSelectedWprProfiles();
         InitializeWprProfileOptions(selected);
         OnPropertyChanged(nameof(TargetExecutableName));

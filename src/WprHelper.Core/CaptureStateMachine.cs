@@ -12,7 +12,7 @@ public sealed class CaptureStateMachine
             [CaptureState.Preparing] = [CaptureState.WaitingForElevation, CaptureState.Failed],
             [CaptureState.WaitingForElevation] = [CaptureState.StartingWpr, CaptureState.Failed],
             [CaptureState.StartingWpr] = [CaptureState.WaitingForWpr, CaptureState.Failed],
-            [CaptureState.WaitingForWpr] = [CaptureState.LaunchingTarget, CaptureState.StopRequested, CaptureState.Failed],
+            [CaptureState.WaitingForWpr] = [CaptureState.LaunchingTarget, CaptureState.Capturing, CaptureState.StopRequested, CaptureState.Failed],
             [CaptureState.LaunchingTarget] = [CaptureState.Capturing, CaptureState.StopRequested, CaptureState.Failed],
             [CaptureState.Capturing] = [CaptureState.StopRequested, CaptureState.Failed],
             [CaptureState.StopRequested] = [CaptureState.StoppingWpr, CaptureState.Failed],

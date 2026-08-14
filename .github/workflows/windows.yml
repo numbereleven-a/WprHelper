@@ -20,12 +20,12 @@ jobs:
           New-Item -ItemType Directory -Path artifacts/release -Force | Out-Null
           $hash = (Get-FileHash artifacts/win-x64/WprHelper.exe -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  WprHelper.exe" | Set-Content artifacts/release/WprHelper.exe.sha256 -Encoding ascii
-          Compress-Archive -LiteralPath artifacts/win-x64/WprHelper.exe, artifacts/release/WprHelper.exe.sha256 -DestinationPath artifacts/release/WprHelper-1.1-win-x64.zip -Force
+          Compress-Archive -LiteralPath artifacts/win-x64/WprHelper.exe, artifacts/release/WprHelper.exe.sha256 -DestinationPath artifacts/release/WprHelper-1.2-win-x64.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: WprHelper-1.1-win-x64
+          name: WprHelper-1.2-win-x64
           path: |
-            artifacts/release/WprHelper-1.1-win-x64.zip
+            artifacts/release/WprHelper-1.2-win-x64.zip
       - uses: actions/upload-artifact@v4
         with:
           name: test-results-and-coverage

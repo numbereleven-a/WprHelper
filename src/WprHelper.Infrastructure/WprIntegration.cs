@@ -88,8 +88,11 @@ public sealed class WprCapabilityDetector : IWprCapabilityDetector
         using var process = Process.Start(startInfo);
         if (process is not null)
         {
-            var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
             await process.WaitForExitAsync(cancellationToken);
+            var output = await outputTask;
+            _ = await errorTask;
             if (process.ExitCode == 0)
             {
                 foreach (var line in output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))

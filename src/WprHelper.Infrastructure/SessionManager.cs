@@ -32,7 +32,8 @@ public sealed class SessionManager(
         var captureDirectory = Path.GetFullPath(NormalizeDestination(profile.LocalDirectory));
         Directory.CreateDirectory(captureDirectory);
         var captureTimestamp = clock.Now;
-        var initialContext = new FileNameContext(Path.GetFileNameWithoutExtension(profile.TargetPath), profile.Name, sessionId, null, captureTimestamp);
+        var appName = profile.LaunchTargetApplication ? Path.GetFileNameWithoutExtension(profile.TargetPath) : "Capture";
+        var initialContext = new FileNameContext(appName, profile.Name, sessionId, null, captureTimestamp);
         var baseName = FileNameTemplate.Expand(profile.FileNameTemplate, initialContext);
         // Write the WPR result directly to the selected local directory. Keeping the
         // final path from the start avoids a second read/copy through the session
@@ -54,7 +55,8 @@ public sealed class SessionManager(
             Warnings = issues.Where(x => x.IsWarning).Select(x => x.Message).ToArray()
         };
         var logPath = Path.Combine(sessionDirectory, "logs", "capture.log");
-        await AppendLogAsync(logPath, $"Session created. Wpr={profile.WprPath}; Target={profile.TargetPath}; Backing={backingFile}; Output={captureDirectory}");
+        var targetDescription = profile.LaunchTargetApplication ? profile.TargetPath : "none";
+        await AppendLogAsync(logPath, $"Session created. Wpr={profile.WprPath}; Target={targetDescription}; Backing={backingFile}; Output={captureDirectory}");
         await sessions.SaveAsync(record, captureCancellationToken);
         try
         {
@@ -93,7 +95,9 @@ public sealed class SessionManager(
                 }
             });
             var capture = await worker.CaptureAsync(sessionId, profile, backingFile, managedProgress, captureCancellationToken);
-            await progressPersistence;
+            Task pendingProgressPersistence;
+            lock (progressGate) pendingProgressPersistence = progressPersistence;
+            await pendingProgressPersistence;
             machine.TransitionTo(CaptureState.Finalizing);
             record = record with { State = CaptureState.Finalizing, TargetPid = capture.TargetPid, StopReason = capture.Reason, CaptureStartedAt = capture.CaptureStartedAt };
             await sessions.SaveAsync(record, CancellationToken.None);

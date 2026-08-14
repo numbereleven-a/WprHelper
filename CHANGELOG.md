@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2
+
+- Add a system-capture mode that starts WPR without launching a target application.
+- Adapt target-only controls, stop conditions, and file naming for system captures.
+- Improve WPR startup, profile detection, trace finalization, and worker communication reliability.
+- Preserve relevant capture settings and WPR version information when switching modes or languages.
+
 ## 1.1
 
 - Skip NGEN/PDB generation by default to reduce finalization time and avoid the extra symbol folder.

@@ -7,6 +7,6 @@
 
 The normal UI remains non-elevated. A short-lived elevated copy performs `wpr -start`, monitors stop conditions, and performs `wpr -stop <etl>`. The ETL backing path is allocated directly in the selected local save directory, so the completed trace does not need a second read/copy through the session directory; the session directory stores only metadata and logs. Communication uses a randomly named pipe limited to the current user and administrators.
 
-The selected recorder must exist and be named `wpr.exe`. The application reads its file version as a compatibility check. The target must be a Windows PE executable.
+The selected recorder must exist and be named `wpr.exe`. The application reads its file version as a compatibility check. When target launch is enabled, the target must be a Windows PE executable; system-capture profiles do not require a target path or PID.
 
 WPR creates the final ETL during `-stop`; therefore capture progress does not claim to know the current ETL size. Free-space and duration checks remain available while recording.

@@ -4,7 +4,7 @@ English · [Русский](README_RU.md)
 
 ![WPR Helper main window](docs/images/WprHelper-main.png)
 
-WPR Helper is a portable Windows application for focused Windows Performance Recorder traces. It starts WPR immediately before the selected application, stops the recording at the right moment, and saves a ready-to-analyze `.etl` file.
+WPR Helper is a portable Windows application for focused Windows Performance Recorder traces. It can start WPR immediately before a selected application or record system activity without launching one, then stop at the right moment and save a ready-to-analyze `.etl` file.
 
 Instead of manually coordinating commands and the target application, WPR Helper keeps the whole capture lifecycle in one window:
 
@@ -17,6 +17,7 @@ wpr -stop Application.etl -skipPdbGen
 ## Why use it
 
 - start the trace before the target application so early activity is not missed;
+- record system activity without launching a target application;
 - combine several built-in profiles, such as `CPU`, `DiskIO`, `FileIO`, `Registry`, and `Network`;
 - use custom `.wprp` profiles alongside built-in profiles;
 - stop manually, after the target exits, after a delay, or at a maximum duration;
@@ -36,11 +37,11 @@ The release package is self-contained and does not require a separate .NET insta
 ## Quick start
 
 1. Run `WprHelper.exe`.
-2. Select the target application and set its arguments if needed.
+2. Select the target application and set its arguments, or clear **Launch an application with the capture** for a system-only trace.
 3. Open **WPR profile** and select one or several profiles. `CPU` with `-filemode` is a practical default.
 4. Choose where to save the ETL file.
 5. Click **Start capture** and approve elevation.
-6. Close the target application or click **Stop**.
+6. Close the target application, wait for the configured duration, or click **Stop**.
 
 WPR may spend some time merging its buffers. WPR Helper waits for `wpr -stop` to finish before showing the final ETL path and enabling **Open ETL folder**.
 

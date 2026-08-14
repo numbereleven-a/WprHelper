@@ -98,6 +98,28 @@ public sealed class ProfileValidationTests
         Assert.DoesNotContain(issues, issue => issue.Field == nameof(CaptureProfile.LocalDirectory));
         Assert.DoesNotContain(issues, issue => issue.Field == nameof(CaptureProfile.DestinationDirectory));
     }
+
+    [Fact]
+    public void TargetApplicationIsOptionalWhenLaunchIsDisabled()
+    {
+        var issues = new ProfileValidator().Validate(new CaptureProfile
+        {
+            LaunchTargetApplication = false,
+            Stop = new StopOptions { StopAfterTargetExit = false }
+        });
+        Assert.DoesNotContain(issues, issue => issue.Field == nameof(CaptureProfile.TargetPath));
+    }
+
+    [Fact]
+    public void TargetExitStopIsRejectedWithoutTargetLaunch()
+    {
+        var issues = new ProfileValidator().Validate(new CaptureProfile
+        {
+            LaunchTargetApplication = false,
+            Stop = new StopOptions { StopAfterTargetExit = true }
+        });
+        Assert.Contains(issues, issue => issue.Field == "Stop.StopAfterTargetExit");
+    }
 }
 
 public sealed class LocalizationResourceTests
@@ -157,13 +179,14 @@ public sealed class StorageTests : IDisposable
     {
         var paths = new StoragePathResolver(_root);
         var repository = new JsonProfileRepository(paths);
-        var profile = new CaptureProfile { Name = "Sample", WprProfile = "CPU", WprProfiles = ["CPU", "DiskIO"], FileMode = true, WprStartArguments = "-strict" };
+        var profile = new CaptureProfile { Name = "Sample", WprProfile = "CPU", WprProfiles = ["CPU", "DiskIO"], FileMode = true, WprStartArguments = "-strict", LaunchTargetApplication = false };
         await repository.SaveAsync(profile, CancellationToken.None);
         var loaded = Assert.Single(await repository.LoadAllAsync(CancellationToken.None));
         Assert.Equal("CPU", loaded.WprProfile);
         Assert.Equal(["CPU", "DiskIO"], loaded.WprProfiles);
         Assert.True(loaded.FileMode);
         Assert.Equal("-strict", loaded.WprStartArguments);
+        Assert.False(loaded.LaunchTargetApplication);
     }
 
     [Fact]
@@ -175,6 +198,7 @@ public sealed class StorageTests : IDisposable
         var loaded = await new JsonProfileRepository(paths).ImportAsync(path, CancellationToken.None);
         Assert.Equal(3, loaded.SchemaVersion);
         Assert.Equal(["CPU"], loaded.WprProfiles);
+        Assert.True(loaded.LaunchTargetApplication);
     }
 
     [Fact]
@@ -249,12 +273,83 @@ public sealed class WorkerProtocolTests
         Directory.Delete(root, true);
     }
 
+    [SkippableFact]
+    public async Task StopFailureAttemptsEmergencyCancellation()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows());
+        var sessionId = Guid.NewGuid();
+        var pipeName = $"WprHelper-Test-{sessionId:N}";
+        using var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        var controller = new StopFailingWprController();
+        var host = new ElevatedWorkerHost(controller, new FixedDisk(), new StopConditionEvaluator(), new SystemClock(), new ProfileValidator());
+        var hostTask = host.RunAsync(pipeName, sessionId, CancellationToken.None);
+        await server.WaitForConnectionAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        using var reader = new StreamReader(server, leaveOpen: true);
+        using var writer = new StreamWriter(server, leaveOpen: true) { AutoFlush = true };
+
+        var root = Path.Combine(Path.GetTempPath(), "WprHelperProtocol", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var wprPath = Path.Combine(root, "wpr.exe");
+            File.Copy(Environment.ProcessPath!, wprPath);
+            var profile = new CaptureProfile
+            {
+                WprPath = wprPath,
+                WprProfile = "CPU",
+                LaunchTargetApplication = false,
+                LocalDirectory = root,
+                Stop = new StopOptions
+                {
+                    StopAfterTargetExit = false,
+                    MaximumDuration = TimeSpan.FromMinutes(1),
+                    MinimumFreeBytes = 64 * 1024 * 1024
+                }
+            };
+            await writer.WriteLineAsync(JsonSerializer.Serialize(new StartCaptureCommand(sessionId, profile, Path.Combine(root, "capture.etl"))));
+
+            WorkerEvent response;
+            do
+            {
+                response = JsonSerializer.Deserialize<WorkerEvent>((await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)))!)!;
+            } while (response.Kind != "ready");
+
+            await writer.WriteLineAsync(JsonSerializer.Serialize<WorkerCommand>(new StopCaptureCommand(sessionId, StopReason.Manual)));
+            do
+            {
+                response = JsonSerializer.Deserialize<WorkerEvent>((await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)))!)!;
+            } while (response.Kind != "error");
+
+            Assert.True(controller.CancelCalled);
+            Assert.Contains("could not save", response.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(1, await hostTask.WaitAsync(TimeSpan.FromSeconds(5)));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     private sealed class FailingWprController : IWprController
     {
         public Task StartAsync(CaptureProfile profile, TimeSpan timeout, CancellationToken token) =>
             throw new InvalidOperationException("expected root cause");
         public Task StopAsync(string path, string etl, bool skipPdbGeneration, TimeSpan timeout, CancellationToken token) => Task.CompletedTask;
         public Task CancelAsync(string path, TimeSpan timeout, CancellationToken token) => Task.CompletedTask;
+    }
+
+    private sealed class StopFailingWprController : IWprController
+    {
+        public bool CancelCalled { get; private set; }
+        public Task StartAsync(CaptureProfile profile, TimeSpan timeout, CancellationToken token) => Task.CompletedTask;
+        public Task StopAsync(string path, string etl, bool skipPdbGeneration, TimeSpan timeout, CancellationToken token) =>
+            throw new InvalidOperationException("expected stop failure");
+        public Task CancelAsync(string path, TimeSpan timeout, CancellationToken token)
+        {
+            CancelCalled = true;
+            return Task.CompletedTask;
+        }
     }
 }
 
@@ -325,6 +420,33 @@ public sealed class SessionManagerTests : IDisposable
         Assert.Single(result.Files.Where(path => path.EndsWith(".etl", StringComparison.OrdinalIgnoreCase)));
     }
 
+    [Fact]
+    public async Task CaptureWithoutTargetUsesNeutralFileNameAndNoPid()
+    {
+        Directory.CreateDirectory(_root);
+        var source = Environment.ProcessPath!;
+        var wpr = Path.Combine(_root, "wpr.exe");
+        File.Copy(source, wpr);
+        var paths = new StoragePathResolver(Path.Combine(_root, "app"));
+        var manager = new SessionManager(new ProfileValidator(), paths, new JsonSessionRepository(paths, new SystemClock()),
+            new NoTargetWorker(), new FixedCapabilities(), new FileTransferService(), new FixedDisk(), new SystemClock());
+        var profile = new CaptureProfile
+        {
+            WprPath = wpr,
+            WprProfile = "CPU",
+            LaunchTargetApplication = false,
+            LocalDirectory = Path.Combine(_root, "captures"),
+            FileNameTemplate = "{AppName}_{DateTime}",
+            Stop = new StopOptions { StopAfterTargetExit = false, MaximumDuration = TimeSpan.FromSeconds(1), MinimumFreeBytes = 64 * 1024 * 1024 }
+        };
+
+        var result = await manager.CaptureAsync(profile, null, CancellationToken.None);
+
+        Assert.Equal(CaptureState.Completed, result.Session.State);
+        Assert.Null(result.Session.TargetPid);
+        Assert.StartsWith("Capture_", Path.GetFileName(result.Session.BackingFile), StringComparison.Ordinal);
+    }
+
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 
     private sealed class CompletingWorker : IElevatedWorkerClient
@@ -360,6 +482,22 @@ public sealed class SessionManagerTests : IDisposable
             Directory.CreateDirectory(Path.GetDirectoryName(backingFile)!);
             await File.WriteAllBytesAsync(backingFile, [1, 2, 3], CancellationToken.None);
             return new ElevatedCaptureResult(321, StopReason.Manual, DateTimeOffset.Now);
+        }
+    }
+
+    private sealed class NoTargetWorker : IElevatedWorkerClient
+    {
+        public Task<ElevatedCaptureResult> CaptureAsync(Guid id, CaptureProfile profile, string backingFile,
+            IProgress<CaptureProgress>? progress, CancellationToken token)
+        {
+            Assert.False(profile.LaunchTargetApplication);
+            Directory.CreateDirectory(Path.GetDirectoryName(backingFile)!);
+            File.WriteAllBytes(backingFile, [1, 2, 3]);
+            progress?.Report(new(CaptureState.StartingWpr, "started", TimeSpan.Zero, 0, long.MaxValue, null));
+            progress?.Report(new(CaptureState.WaitingForWpr, "ready", TimeSpan.Zero, 0, long.MaxValue, null));
+            progress?.Report(new(CaptureState.Capturing, "capturing", TimeSpan.Zero, 0, long.MaxValue, null));
+            progress?.Report(new(CaptureState.StoppingWpr, "stopping", TimeSpan.FromSeconds(1), 3, long.MaxValue, null, StopReason.DurationReached));
+            return Task.FromResult(new ElevatedCaptureResult(null, StopReason.DurationReached, DateTimeOffset.Now));
         }
     }
 

@@ -14,6 +14,7 @@ public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
     private readonly Forms.NotifyIcon _tray;
+    private readonly System.Drawing.Icon? _trayIcon;
     private bool _closingAfterCapture;
 
     public MainWindow(MainWindowViewModel viewModel)
@@ -26,9 +27,10 @@ public partial class MainWindow : Window
         menu.Items.Add("WPR Helper", null, (_, _) => Restore());
         menu.Items.Add("Stop", null, (_, _) => { if (_viewModel.StopCommand.CanExecute(null)) _viewModel.StopCommand.Execute(null); });
         menu.Items.Add("Exit", null, (_, _) => Close());
+        _trayIcon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
         _tray = new Forms.NotifyIcon
         {
-            Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!),
+            Icon = _trayIcon,
             Text = "WPR Helper",
             ContextMenuStrip = menu,
             Visible = true
@@ -58,6 +60,7 @@ public partial class MainWindow : Window
         }
         _tray.Visible = false;
         _tray.Dispose();
+        _trayIcon?.Dispose();
         base.OnClosing(e);
     }
 

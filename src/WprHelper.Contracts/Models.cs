@@ -37,6 +37,7 @@ public sealed record CaptureProfile
     public bool FileMode { get; init; } = true;
     public bool SkipPdbGeneration { get; init; } = true;
     public string WprStartArguments { get; init; } = string.Empty;
+    public bool LaunchTargetApplication { get; init; } = true;
     public string TargetPath { get; init; } = string.Empty;
     public string TargetArguments { get; init; } = string.Empty;
     public string WorkingDirectory { get; init; } = string.Empty;
@@ -77,7 +78,7 @@ public sealed record CaptureProgress(
     double? TransferPercent = null);
 
 public sealed record CaptureResult(SessionRecord Session, IReadOnlyList<string> Files);
-public sealed record ElevatedCaptureResult(int TargetPid, StopReason Reason, DateTimeOffset CaptureStartedAt);
+public sealed record ElevatedCaptureResult(int? TargetPid, StopReason Reason, DateTimeOffset CaptureStartedAt);
 public sealed record TrackedTargetProcess(int Pid, DateTimeOffset? StartedAt);
 
 public sealed record WprCapabilities(

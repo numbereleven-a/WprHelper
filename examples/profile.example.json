@@ -8,6 +8,7 @@
   "FileMode": true,
   "SkipPdbGeneration": true,
   "WprStartArguments": "",
+  "LaunchTargetApplication": true,
   "TargetPath": "C:\\Windows\\System32\\notepad.exe",
   "TargetArguments": "",
   "WorkingDirectory": "C:\\Windows\\System32",
