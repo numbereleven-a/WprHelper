@@ -59,6 +59,23 @@ public sealed class WprCommandBuilder : IWprCommandBuilder
     public IReadOnlyList<string> BuildCancel() => ["-cancel"];
 }
 
+internal static class WprProfileCatalog
+{
+    private static readonly HashSet<string> HeaderTokens = new(StringComparer.OrdinalIgnoreCase) { "Microsoft", "Copyright", "Usage:" };
+
+    public static IReadOnlySet<string> Parse(string output)
+    {
+        var profiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var columns = line.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (columns.Length >= 2 && char.IsLetter(columns[0][0]) && !HeaderTokens.Contains(columns[0]))
+                profiles.Add(columns[0]);
+        }
+        return profiles;
+    }
+}
+
 public sealed class WprCapabilityDetector : IWprCapabilityDetector
 {
     private static readonly HashSet<string> BuiltInProfiles = new(StringComparer.OrdinalIgnoreCase)
@@ -94,14 +111,7 @@ public sealed class WprCapabilityDetector : IWprCapabilityDetector
             var output = await outputTask;
             _ = await errorTask;
             if (process.ExitCode == 0)
-            {
-                foreach (var line in output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
-                {
-                    var columns = line.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-                    if (columns.Length >= 2 && char.IsLetter(columns[0][0]) && !columns[0].Equals("Microsoft", StringComparison.OrdinalIgnoreCase))
-                        profiles.Add(columns[0]);
-                }
-            }
+                profiles.UnionWith(WprProfileCatalog.Parse(output));
         }
         return new WprCapabilities(version, profiles);
     }
@@ -127,25 +137,46 @@ public sealed class WprController(IWprCommandBuilder commandBuilder) : IWprContr
 {
     public Task StartAsync(CaptureProfile profile, TimeSpan timeout, CancellationToken cancellationToken)
     {
-        return RunAsync(profile.WprPath, commandBuilder.BuildStart(profile), timeout,
+        return RunCheckedAsync(profile.WprPath, commandBuilder.BuildStart(profile), timeout,
             "Windows Performance Recorder could not start the trace.", cancellationToken);
     }
 
     public Task StopAsync(string executablePath, string etlPath, bool skipPdbGeneration, TimeSpan timeout, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(etlPath)!);
-        return RunAsync(executablePath, commandBuilder.BuildStop(etlPath, skipPdbGeneration), timeout,
+        return RunCheckedAsync(executablePath, commandBuilder.BuildStop(etlPath, skipPdbGeneration), timeout,
             "Windows Performance Recorder could not stop and save the trace.", cancellationToken);
     }
 
     public Task CancelAsync(string executablePath, TimeSpan timeout, CancellationToken cancellationToken)
     {
-        return RunAsync(executablePath, commandBuilder.BuildCancel(), timeout,
+        return RunCheckedAsync(executablePath, commandBuilder.BuildCancel(), timeout,
             "Windows Performance Recorder could not cancel the trace.", cancellationToken);
     }
 
-    private static async Task RunAsync(string executablePath, IEnumerable<string> arguments, TimeSpan timeout,
+    public async Task<WprStatusReport> GetStatusAsync(string executablePath, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        var result = await ExecuteAsync(executablePath, ["-status"], timeout, cancellationToken).ConfigureAwait(false);
+        if (!result.Launched) return new WprStatusReport(false, false, result.Output);
+        return new WprStatusReport(true, !result.Output.Contains("not recording", StringComparison.OrdinalIgnoreCase), result.Output);
+    }
+
+    private static async Task RunCheckedAsync(string executablePath, IEnumerable<string> arguments, TimeSpan timeout,
         string failureMessage, CancellationToken cancellationToken)
+    {
+        var result = await ExecuteAsync(executablePath, arguments, timeout, cancellationToken).ConfigureAwait(false);
+        if (!result.Launched) throw new InvalidOperationException($"Unable to start Windows Performance Recorder: {result.Output}");
+        if (result.ExitCode != 0)
+        {
+            var troubleshooting = result.Output.Contains("0x80010106", StringComparison.OrdinalIgnoreCase)
+                ? Environment.NewLine + "The installed WPR failed while finalizing the trace. Try a newer wpr.exe from Windows Performance Toolkit, or repair/update Windows, then select that executable in WPR Helper."
+                : string.Empty;
+            throw new InvalidOperationException($"{failureMessage} Exit code: {result.ExitCode}.{(result.Output.Length > 0 ? Environment.NewLine + result.Output : string.Empty)}{troubleshooting}");
+        }
+    }
+
+    private static async Task<(bool Launched, int ExitCode, string Output)> ExecuteAsync(string executablePath,
+        IEnumerable<string> arguments, TimeSpan timeout, CancellationToken cancellationToken)
     {
         var startInfo = new ProcessStartInfo(executablePath)
         {
@@ -155,25 +186,21 @@ public sealed class WprController(IWprCommandBuilder commandBuilder) : IWprContr
             RedirectStandardError = true
         };
         foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
-        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Unable to start Windows Performance Recorder.");
+        using var process = Process.Start(startInfo);
+        if (process is null) return (false, -1, "wpr.exe could not be launched.");
         var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(timeout);
-        try { await process.WaitForExitAsync(timeoutCts.Token); }
+        try { await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false); }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
-            throw new TimeoutException($"{failureMessage} The command timed out.");
+            throw new TimeoutException("The command timed out.");
         }
-        var details = string.Join(Environment.NewLine, new[] { await outputTask, await errorTask }.Where(x => !string.IsNullOrWhiteSpace(x))).Trim();
-        if (process.ExitCode != 0)
-        {
-            var troubleshooting = details.Contains("0x80010106", StringComparison.OrdinalIgnoreCase)
-                ? Environment.NewLine + "The installed WPR failed while finalizing the trace. Try a newer wpr.exe from Windows Performance Toolkit, or repair/update Windows, then select that executable in WPR Helper."
-                : string.Empty;
-            throw new InvalidOperationException($"{failureMessage} Exit code: {process.ExitCode}.{(details.Length > 0 ? Environment.NewLine + details : string.Empty)}{troubleshooting}");
-        }
+        var details = string.Join(Environment.NewLine, new[] { await outputTask.ConfigureAwait(false), await errorTask.ConfigureAwait(false) }
+            .Where(x => !string.IsNullOrWhiteSpace(x))).Trim();
+        return (true, process.ExitCode, details);
     }
 }
 

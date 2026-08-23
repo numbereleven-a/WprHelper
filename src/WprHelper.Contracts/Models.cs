@@ -47,7 +47,6 @@ public sealed record CaptureProfile
     public string DestinationDirectory { get; init; } = string.Empty;
     public string FileNameTemplate { get; init; } = "{AppName}_{ComputerName}_{DateTime}";
     public bool OverwriteExisting { get; init; }
-    public bool DeleteLocalAfterCopy { get; init; }
 }
 
 public sealed record SessionRecord
@@ -84,6 +83,22 @@ public sealed record TrackedTargetProcess(int Pid, DateTimeOffset? StartedAt);
 public sealed record WprCapabilities(
     Version Version,
     IReadOnlySet<string> BuiltInProfiles);
+
+public sealed record WprStatusReport(bool QuerySucceeded, bool RecordingActive, string Output);
+
+public sealed record WprHealthReport(
+    bool ExecutableFound,
+    string? FileVersion,
+    bool ProfilesListed,
+    int ProfileCount,
+    string? ProfilesError,
+    bool SmokeTestAttempted,
+    bool SmokeTestPassed,
+    string? SmokeTestError,
+    TimeSpan? SmokeTestDuration)
+{
+    public bool IsHealthy => ExecutableFound && ProfilesListed && (!SmokeTestAttempted || SmokeTestPassed);
+}
 
 public sealed record FileTransferProgress(long BytesCopied, long TotalBytes)
 {

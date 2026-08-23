@@ -21,10 +21,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly ISessionManager _sessions;
     private readonly IProfileRepository _profiles;
     private readonly IWprCommandBuilder _wprCommands;
+    private readonly IWprHealthChecker _healthChecker;
     private CancellationTokenSource? _captureCts;
     private CancellationTokenSource? _postProcessCts;
     private CaptureState _currentState = CaptureState.Idle;
     private bool _isRunning;
+    private bool _isCheckingWpr;
     private string _statusMessage;
     private string _stateText;
     private double _progressPercent;
@@ -36,9 +38,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _stopAfterTargetExitBeforeSystemCapture = true;
 
     public MainWindowViewModel(ISessionManager sessions, IProfileRepository profiles, IStoragePathResolver paths,
-        IWprCommandBuilder wprCommands)
+        IWprCommandBuilder wprCommands, IWprHealthChecker healthChecker)
     {
-        _sessions = sessions; _profiles = profiles; _wprCommands = wprCommands; DataRoot = paths.DataRoot;
+        _sessions = sessions; _profiles = profiles; _wprCommands = wprCommands; _healthChecker = healthChecker; DataRoot = paths.DataRoot;
         _settingsPath = Path.Combine(DataRoot, "settings.json");
         OpenEtlFolderCommand = new RelayCommand(OpenEtlFolder, CanOpenEtlFolder);
         LocalDirectory = Path.Combine(paths.DataRoot, "Captures");
@@ -47,10 +49,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _statusMessage = LocalizationService.Get("Ready"); _stateText = CaptureState.Idle.ToString();
         InitializeWprProfileOptions(["CPU"]);
         BrowseWprCommand = new RelayCommand(() => WprPath = PickExecutable(WprPath, "wpr.exe") ?? WprPath);
+        CheckWprCommand = new AsyncRelayCommand(CheckWprAsync, () => !IsCheckingWpr, HandleCommandError);
         BrowseTargetCommand = new RelayCommand(() => { var path = PickExecutable(TargetPath, "*.exe"); if (path is not null) { TargetPath = path; WorkingDirectory = Path.GetDirectoryName(path) ?? string.Empty; } });
         BrowseLocalCommand = new RelayCommand(() => LocalDirectory = PickFolder(LocalDirectory) ?? LocalDirectory);
         BrowseDestinationCommand = new RelayCommand(() => DestinationDirectory = PickFolder(DestinationDirectory) ?? DestinationDirectory);
-        StartCommand = new AsyncRelayCommand(StartAsync, () => !IsRunning, HandleCommandError);
+        StartCommand = new AsyncRelayCommand(StartAsync, () => !IsRunning && !IsCheckingWpr, HandleCommandError);
         StopCommand = new RelayCommand(RequestStop, () => IsRunning);
         SaveProfileCommand = new AsyncRelayCommand(SaveProfileAsync, onError: HandleCommandError);
         RefreshProfilesCommand = new AsyncRelayCommand(RefreshProfilesAsync, onError: HandleCommandError);
@@ -63,6 +66,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task InitializeAsync()
     {
+        var interrupted = await _sessions.MarkInterruptedSessionsAsync(CancellationToken.None);
+        if (interrupted > 0) StatusMessage = LocalizationService.Get("InterruptedSessionsMarked");
         await RefreshProfilesAsync();
         if (!LoadLastUsedProfile || string.IsNullOrWhiteSpace(_lastUsedProfileName)) return;
         var profile = Profiles.FirstOrDefault(x => string.Equals(x.Name, _lastUsedProfileName, StringComparison.OrdinalIgnoreCase));
@@ -75,11 +80,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string DataRoot { get; }
     public string ApplicationVersion { get; } = Assembly.GetEntryAssembly()?.GetName().Version is { } version
         ? $"{version.Major}.{version.Minor}"
-        : "1.2";
+        : "1.3";
     public ObservableCollection<CaptureProfile> Profiles { get; } = [];
     public ObservableCollection<WprProfileOption> WprProfileOptions { get; } = [];
     public ObservableCollection<string> SelectedWprProfileDescriptions { get; } = [];
     public RelayCommand BrowseWprCommand { get; }
+    public AsyncRelayCommand CheckWprCommand { get; }
     public RelayCommand BrowseTargetCommand { get; }
     public RelayCommand BrowseLocalCommand { get; }
     public RelayCommand BrowseDestinationCommand { get; }
@@ -135,6 +141,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
     public double UiScale => UiScalePercent / 100d;
     public bool IsRunning { get => _isRunning; private set { if (Set(ref _isRunning, value)) { StartCommand.RaiseCanExecuteChanged(); StopCommand.RaiseCanExecuteChanged(); ResetSettingsCommand.RaiseCanExecuteChanged(); } } }
+    public bool IsCheckingWpr
+    {
+        get => _isCheckingWpr;
+        private set
+        {
+            if (!Set(ref _isCheckingWpr, value)) return;
+            CheckWprCommand.RaiseCanExecuteChanged();
+            StartCommand.RaiseCanExecuteChanged();
+        }
+    }
+    public string WprCheckReport { get => Get(string.Empty); private set => Set(value); }
     public string StatusMessage { get => _statusMessage; private set => Set(ref _statusMessage, value); }
     public string StateText { get => _stateText; private set => Set(ref _stateText, value); }
     public double ProgressPercent { get => _progressPercent; private set => Set(ref _progressPercent, value); }
@@ -181,6 +198,40 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception ex) { StateText = CaptureState.Failed.ToString(); StatusMessage = $"{LocalizationService.Get("CaptureFailed")}: {ex.Message}"; }
         finally { FinishTimeText = DateTime.Now.ToString("HH:mm:ss", CultureInfo.CurrentCulture); IsProgressIndeterminate = false; _captureCts.Dispose(); _captureCts = null; _postProcessCts.Dispose(); _postProcessCts = null; _currentState = CaptureState.Idle; IsRunning = false; }
+    }
+
+    private async Task CheckWprAsync()
+    {
+        IsCheckingWpr = true;
+        try
+        {
+            StatusMessage = LocalizationService.Get("WprCheckRunning");
+            var report = await _healthChecker.CheckAsync(WprPath, CancellationToken.None);
+            WprCheckReport = FormatWprHealthReport(report);
+            StatusMessage = LocalizationService.Get(report.IsHealthy ? "WprCheckPassed" : "WprCheckProblems");
+        }
+        finally { IsCheckingWpr = false; }
+    }
+
+    private string FormatWprHealthReport(WprHealthReport report)
+    {
+        if (!report.ExecutableFound) return $"{LocalizationService.Get("WprCheckMarkerFail")} {LocalizationService.Get("NoWpr")}";
+        var ok = LocalizationService.Get("WprCheckMarkerOk");
+        var fail = LocalizationService.Get("WprCheckMarkerFail");
+        var versionSuffix = string.IsNullOrWhiteSpace(report.FileVersion) ? string.Empty : $" ({report.FileVersion})";
+        var lines = new List<string>
+        {
+            $"{ok} wpr.exe{versionSuffix}",
+            report.ProfilesListed
+                ? $"{ok} {LocalizationService.Get("WprCheckProfilesOk")} ({report.ProfileCount})"
+                : $"{fail} {LocalizationService.Get("WprCheckProfilesFailed")} {report.ProfilesError}"
+        };
+        lines.Add(report.SmokeTestAttempted
+            ? report.SmokeTestPassed
+                ? $"{ok} {LocalizationService.Get("WprCheckSmokeOk")} {(report.SmokeTestDuration ?? TimeSpan.Zero).TotalSeconds:0.#} {LocalizationService.Get("SecondsShort")}"
+                : $"{fail} {LocalizationService.Get("WprCheckSmokeFailed")} {report.SmokeTestError}"
+            : LocalizationService.Get("WprCheckSmokeSkipped"));
+        return string.Join(Environment.NewLine, lines);
     }
 
     private CaptureProfile BuildProfile()
@@ -448,9 +499,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _ => "WprProfileDescriptionOther"
     };
     private static string FormatSize(long value) => value >= 1024 * 1024 * 1024 ? $"{value / (1024d * 1024 * 1024):0.00} GB" : value >= 1024 * 1024 ? $"{value / (1024d * 1024):0.0} MB" : $"{value / 1024d:0} KB";
-    private static string DescribeWpr(string path) => File.Exists(path) && string.Equals(Path.GetFileName(path), "wpr.exe", StringComparison.OrdinalIgnoreCase)
-        ? $"wpr.exe ({FileVersionInfo.GetVersionInfo(path).FileVersion})"
-        : LocalizationService.Get("NoWpr");
+    private static string DescribeWpr(string path)
+    {
+        if (!File.Exists(path) || !string.Equals(Path.GetFileName(path), "wpr.exe", StringComparison.OrdinalIgnoreCase))
+            return LocalizationService.Get("NoWpr");
+        try { return $"wpr.exe ({FileVersionInfo.GetVersionInfo(path).FileVersion})"; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return LocalizationService.Get("NoWpr");
+        }
+    }
     private void HandleCommandError(Exception ex) => StatusMessage = ex.Message;
     private void RefreshLocalizedValues()
     {

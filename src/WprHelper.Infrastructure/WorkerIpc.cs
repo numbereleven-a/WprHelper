@@ -29,17 +29,11 @@ internal static class PipeJson
 
     private static async Task<string?> ReadBoundedLineAsync(StreamReader reader, CancellationToken token)
     {
-        var result = new StringBuilder();
-        var character = new char[1];
-        while (true)
-        {
-            var read = await reader.ReadAsync(character.AsMemory(), token);
-            if (read == 0) return result.Length == 0 ? null : result.ToString();
-            if (character[0] == '\n') return result.ToString();
-            if (character[0] != '\r') result.Append(character[0]);
-            if (result.Length > MaximumMessageCharacters)
-                throw new InvalidDataException("Worker IPC message exceeds the 1 MiB limit.");
-        }
+        var line = await reader.ReadLineAsync(token).ConfigureAwait(false);
+        if (line is null) return null;
+        if (line.Length > MaximumMessageCharacters)
+            throw new InvalidDataException("Worker IPC message exceeds the 1 MiB limit.");
+        return line.TrimEnd('\r');
     }
 }
 
@@ -76,6 +70,9 @@ public sealed class ElevatedWorkerHost(IWprController wpr, IDiskSpaceService dis
         var wprStarted = false;
         var reason = StopReason.None;
         string? error = null;
+        long freeBytes = long.MaxValue;
+        string? diskError = null;
+        using var diskSamplerCts = new CancellationTokenSource();
         try
         {
             start = await PipeJson.ReadAsync<StartCaptureCommand>(reader, cancellationToken)
@@ -91,6 +88,33 @@ public sealed class ElevatedWorkerHost(IWprController wpr, IDiskSpaceService dis
             DateTimeOffset? targetStartedAt = null;
             var lastClientContact = Stopwatch.GetTimestamp();
             Task? progressWrite = null;
+
+            var status = await wpr.GetStatusAsync(start.Profile.WprPath, TimeSpan.FromSeconds(20), cancellationToken);
+            if (status.QuerySucceeded && status.RecordingActive)
+            {
+                await SendEventAsync(new WorkerEvent("progress", start.SessionId,
+                    "A WPR recording left over from a previous session is still active and will be canceled."), cancellationToken);
+                await wpr.CancelAsync(start.Profile.WprPath, TimeSpan.FromSeconds(30), cancellationToken);
+            }
+
+            var diskSampler = Task.Run(async () =>
+            {
+                while (!diskSamplerCts.IsCancellationRequested)
+                {
+                    try
+                    {
+                        var sessionFreeBytes = disk.GetFreeBytes(Path.GetDirectoryName(start.BackingFile)!);
+                        var outputFreeBytes = disk.GetFreeBytes(start.Profile.LocalDirectory);
+                        freeBytes = Math.Min(sessionFreeBytes, outputFreeBytes);
+                        diskError = null;
+                    }
+                    catch (IOException ex) { diskError = ex.Message; }
+                    catch (UnauthorizedAccessException) { diskError = "Access denied while checking the capture storage."; }
+                    try { await Task.Delay(2000, diskSamplerCts.Token); }
+                    catch (OperationCanceledException) { break; }
+                }
+            }, CancellationToken.None);
+
             await wpr.StartAsync(start.Profile, TimeSpan.FromSeconds(30), cancellationToken);
             wprStarted = true;
             lastClientContact = Stopwatch.GetTimestamp();
@@ -125,17 +149,10 @@ public sealed class ElevatedWorkerHost(IWprController wpr, IDiskSpaceService dis
                     reason = StopReason.ConnectionLost;
                     break;
                 }
-                long freeBytes;
-                try
-                {
-                    var sessionFreeBytes = disk.GetFreeBytes(Path.GetDirectoryName(start.BackingFile)!);
-                    var outputFreeBytes = disk.GetFreeBytes(start.Profile.LocalDirectory);
-                    freeBytes = Math.Min(sessionFreeBytes, outputFreeBytes);
-                }
-                catch (IOException ex)
+                if (diskError is not null)
                 {
                     reason = StopReason.Error;
-                    error = $"Capture storage could not be checked: {ex.Message}";
+                    error = $"Capture storage could not be checked: {diskError}";
                     break;
                 }
                 var targetExited = targetPid is { } pid && !IsRunning(pid, targetStartedAt);
@@ -168,11 +185,12 @@ public sealed class ElevatedWorkerHost(IWprController wpr, IDiskSpaceService dis
         }
         finally
         {
+            diskSamplerCts.Cancel();
             if (wprStarted && start is not null)
             {
                 try { await SendEventAsync(new WorkerEvent("stopping", expectedSessionId, "Stopping Windows Performance Recorder and saving ETL.", reason), CancellationToken.None); }
                 catch (IOException) { }
-                try { await wpr.StopAsync(start.Profile.WprPath, start.BackingFile, start.Profile.SkipPdbGeneration, Timeout.InfiniteTimeSpan, CancellationToken.None); }
+                try { await wpr.StopAsync(start.Profile.WprPath, start.BackingFile, start.Profile.SkipPdbGeneration, TimeSpan.FromMinutes(10), CancellationToken.None); }
                 catch (Exception stopException)
                 {
                     reason = StopReason.Error;

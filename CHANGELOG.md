@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3
+
+- Add a wpr.exe check button that verifies the executable, lists available profiles, and runs a short test recording when elevated.
+- Cancel a WPR recording left over from a previous session before starting a new capture.
+- Bound the trace stop timeout and fall back to cancellation instead of waiting indefinitely.
+- Move free-space polling to a background sampler so slow UNC paths can no longer be mistaken for a lost worker connection.
+- Mark sessions interrupted by an application exit as interrupted at startup.
+- Read worker IPC messages line by line, remove unused profile fields and resources, and make WPR version detection resilient to locked files.
+
 ## 1.2
 
 - Add a system-capture mode that starts WPR without launching a target application.

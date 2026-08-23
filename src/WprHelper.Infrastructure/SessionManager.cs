@@ -40,7 +40,9 @@ public sealed class SessionManager(
         // directory, which can expose a short-lived file-system visibility gap on
         // virtual machines and redirected storage.
         var backingFile = FileNameTemplate.GetUniquePath(captureDirectory, baseName, ".etl");
-        if (disk.GetFreeBytes(captureDirectory) <= profile.Stop.MinimumFreeBytes || disk.GetFreeBytes(sessionDirectory) <= profile.Stop.MinimumFreeBytes)
+        var captureFreeBytes = disk.GetFreeBytes(captureDirectory);
+        var sessionFreeBytes = disk.GetFreeBytes(sessionDirectory);
+        if (captureFreeBytes <= profile.Stop.MinimumFreeBytes || sessionFreeBytes <= profile.Stop.MinimumFreeBytes)
             throw new IOException("Available disk space is below the configured reserve.");
         machine.TransitionTo(CaptureState.Preparing);
         var record = new SessionRecord
@@ -142,6 +144,26 @@ public sealed class SessionManager(
             await AppendLogAsync(logPath, $"Failed: {ex}");
             throw;
         }
+    }
+
+    public async Task<int> MarkInterruptedSessionsAsync(CancellationToken cancellationToken)
+    {
+        var recoverable = await sessions.FindRecoverableAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var record in recoverable)
+        {
+            var warnings = record.Warnings
+                .Append("WPR Helper exited while this capture was running. The elevated worker may still have saved the ETL.")
+                .ToArray();
+            await sessions.SaveAsync(record with
+            {
+                State = CaptureState.Failed,
+                Error = "The capture was interrupted when WPR Helper exited.",
+                CompletedAt = clock.Now,
+                UpdatedAt = clock.Now,
+                Warnings = warnings
+            }, CancellationToken.None).ConfigureAwait(false);
+        }
+        return recoverable.Count;
     }
 
     public static string NormalizeDestination(string path) => path.StartsWith("//", StringComparison.Ordinal) ? "\\\\" + path[2..].Replace('/', '\\') : path;

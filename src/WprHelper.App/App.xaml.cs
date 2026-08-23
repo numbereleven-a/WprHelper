@@ -53,7 +53,7 @@ public partial class App : System.Windows.Application
         {
             var services = ServiceRegistry.Create();
             LocalizationService.Apply(LanguagePreference.Automatic);
-            var viewModel = new MainWindowViewModel(services.SessionManager, services.ProfileRepository, services.Paths, services.CommandBuilder);
+            var viewModel = new MainWindowViewModel(services.SessionManager, services.ProfileRepository, services.Paths, services.CommandBuilder, services.HealthChecker);
             await viewModel.InitializeAsync();
             var window = new MainWindow(viewModel);
             MainWindow = window;
@@ -93,6 +93,7 @@ internal sealed class ServiceRegistry
     public required IProfileRepository ProfileRepository { get; init; }
     public required ISessionManager SessionManager { get; init; }
     public required IWprCommandBuilder CommandBuilder { get; init; }
+    public required IWprHealthChecker HealthChecker { get; init; }
 
     public static ServiceRegistry Create()
     {
@@ -111,7 +112,8 @@ internal sealed class ServiceRegistry
             Paths = paths,
             ProfileRepository = new JsonProfileRepository(paths),
             CommandBuilder = commands,
-            SessionManager = new SessionManager(validator, paths, sessionRepository, workerClient, new WprCapabilityDetector(), transfer, disk, clock)
+            SessionManager = new SessionManager(validator, paths, sessionRepository, workerClient, new WprCapabilityDetector(), transfer, disk, clock),
+            HealthChecker = new WprHealthChecker()
         };
     }
 

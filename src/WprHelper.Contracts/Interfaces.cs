@@ -13,11 +13,17 @@ public interface IWprCapabilityDetector
     Task<WprCapabilities> DetectAsync(string executablePath, CancellationToken cancellationToken);
 }
 
+public interface IWprHealthChecker
+{
+    Task<WprHealthReport> CheckAsync(string executablePath, CancellationToken cancellationToken);
+}
+
 public interface IWprController
 {
     Task StartAsync(CaptureProfile profile, TimeSpan timeout, CancellationToken cancellationToken);
     Task StopAsync(string executablePath, string etlPath, bool skipPdbGeneration, TimeSpan timeout, CancellationToken cancellationToken);
     Task CancelAsync(string executablePath, TimeSpan timeout, CancellationToken cancellationToken);
+    Task<WprStatusReport> GetStatusAsync(string executablePath, TimeSpan timeout, CancellationToken cancellationToken);
 }
 
 public interface ITargetProcessLauncher
@@ -35,6 +41,7 @@ public interface ISessionManager
 {
     Task<CaptureResult> CaptureAsync(CaptureProfile profile, IProgress<CaptureProgress>? progress,
         CancellationToken captureCancellationToken, CancellationToken postProcessCancellationToken = default);
+    Task<int> MarkInterruptedSessionsAsync(CancellationToken cancellationToken);
 }
 
 public interface ISessionRepository

@@ -61,6 +61,20 @@ public sealed class WprCommandBuilderTests
     }
 }
 
+public sealed class WprHealthCheckerTests
+{
+    [Fact]
+    public async Task MissingExecutableIsReportedAsUnhealthyWithoutLaunchingWpr()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "wpr.exe");
+        var report = await new WprHealthChecker().CheckAsync(missing, CancellationToken.None);
+        Assert.False(report.IsHealthy);
+        Assert.False(report.ExecutableFound);
+        Assert.False(report.ProfilesListed);
+        Assert.False(report.SmokeTestAttempted);
+    }
+}
+
 public sealed class ProfileValidationTests
 {
     [Fact]
@@ -337,6 +351,8 @@ public sealed class WorkerProtocolTests
             throw new InvalidOperationException("expected root cause");
         public Task StopAsync(string path, string etl, bool skipPdbGeneration, TimeSpan timeout, CancellationToken token) => Task.CompletedTask;
         public Task CancelAsync(string path, TimeSpan timeout, CancellationToken token) => Task.CompletedTask;
+        public Task<WprStatusReport> GetStatusAsync(string path, TimeSpan timeout, CancellationToken token) =>
+            Task.FromResult(new WprStatusReport(true, false, string.Empty));
     }
 
     private sealed class StopFailingWprController : IWprController
@@ -350,6 +366,8 @@ public sealed class WorkerProtocolTests
             CancelCalled = true;
             return Task.CompletedTask;
         }
+        public Task<WprStatusReport> GetStatusAsync(string path, TimeSpan timeout, CancellationToken token) =>
+            Task.FromResult(new WprStatusReport(true, false, string.Empty));
     }
 }
 
