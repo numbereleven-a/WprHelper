@@ -96,10 +96,18 @@ public sealed class SessionManager(
                     progressPersistence = PersistProgressAfterAsync(progressPersistence, sessions, snapshot, logPath, logMessage);
                 }
             });
-            var capture = await worker.CaptureAsync(sessionId, profile, backingFile, managedProgress, captureCancellationToken);
-            Task pendingProgressPersistence;
-            lock (progressGate) pendingProgressPersistence = progressPersistence;
-            await pendingProgressPersistence;
+            ElevatedCaptureResult capture;
+            try
+            {
+                capture = await worker.CaptureAsync(sessionId, profile, backingFile, managedProgress, captureCancellationToken);
+            }
+            finally
+            {
+                // Drain queued writes on failure too, before persisting the terminal state.
+                Task pendingProgressPersistence;
+                lock (progressGate) pendingProgressPersistence = progressPersistence;
+                await pendingProgressPersistence;
+            }
             machine.TransitionTo(CaptureState.Finalizing);
             record = record with { State = CaptureState.Finalizing, TargetPid = capture.TargetPid, StopReason = capture.Reason, CaptureStartedAt = capture.CaptureStartedAt };
             await sessions.SaveAsync(record, CancellationToken.None);

@@ -30,9 +30,28 @@ public sealed class WprHealthChecker : IWprHealthChecker
 
         var smokeWatch = Stopwatch.StartNew();
         var instanceName = $"WprHelperCheck-{Guid.NewGuid():N}";
-        var start = await RunAsync(executablePath,
-            ["-start", "CPU", "-filemode", "-instancename", instanceName],
-            TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
+        WprRunResult start;
+        var cancelled = false;
+        string? cancelError = null;
+        try
+        {
+            start = await RunAsync(executablePath,
+                ["-start", "CPU", "-filemode", "-instancename", instanceName],
+                TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
+            if (start.ExitCode == 0) await Task.Delay(1500, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            // The named test recording may have started even if the command was interrupted.
+            for (var attempt = 0; attempt < 3 && !cancelled; attempt++)
+            {
+                var cancel = await RunAsync(executablePath, ["-cancel", "-instancename", instanceName],
+                    TimeSpan.FromSeconds(30), CancellationToken.None).ConfigureAwait(false);
+                cancelled = cancel.ExitCode == 0;
+                cancelError = cancelled ? null : Summarize(cancel.Output);
+                if (!cancelled && attempt < 2) await Task.Delay(500, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
         if (start.ExitCode != 0)
         {
             smokeWatch.Stop();
@@ -40,16 +59,6 @@ public sealed class WprHealthChecker : IWprHealthChecker
                 true, false, Summarize(start.Output), smokeWatch.Elapsed);
         }
 
-        var cancelled = false;
-        string? cancelError = null;
-        for (var attempt = 0; attempt < 3 && !cancelled; attempt++)
-        {
-            await Task.Delay(1500, cancellationToken).ConfigureAwait(false);
-            var cancel = await RunAsync(executablePath, ["-cancel", "-instancename", instanceName],
-                TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
-            cancelled = cancel.ExitCode == 0;
-            cancelError = cancelled ? null : Summarize(cancel.Output);
-        }
         smokeWatch.Stop();
         return new WprHealthReport(true, fileVersion, profiles.ExitCode == 0, profileCount, profilesError,
             true, cancelled, cancelError, smokeWatch.Elapsed);
@@ -70,29 +79,11 @@ public sealed class WprHealthChecker : IWprHealthChecker
     private static async Task<WprRunResult> RunAsync(string executablePath, IReadOnlyList<string> arguments,
         TimeSpan timeout, CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo(executablePath)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-        foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
-        using var process = Process.Start(startInfo);
-        if (process is null) return new WprRunResult(-1, "Unable to start wpr.exe.");
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        try { await process.WaitForExitAsync(cancellationToken).WaitAsync(timeout, cancellationToken).ConfigureAwait(false); }
+        try { return await WprProcessRunner.RunAsync(executablePath, arguments, timeout, cancellationToken).ConfigureAwait(false); }
         catch (TimeoutException)
         {
-            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
             return new WprRunResult(-1, $"wpr {string.Join(' ', arguments)} timed out after {timeout.TotalSeconds:0} seconds.");
         }
-        var output = await outputTask.ConfigureAwait(false);
-        var error = await errorTask.ConfigureAwait(false);
-        var details = string.Join(Environment.NewLine,
-            new[] { output, error }.Where(x => !string.IsNullOrWhiteSpace(x))).Trim();
-        return new WprRunResult(process.HasExited ? process.ExitCode : -1, details);
     }
 }
 

@@ -94,25 +94,10 @@ public sealed class WprCapabilityDetector : IWprCapabilityDetector
         var info = FileVersionInfo.GetVersionInfo(executablePath);
         var version = Version.TryParse(info.FileVersion?.Split(' ').FirstOrDefault(), out var parsed) ? parsed : new Version(0, 0);
         var profiles = new HashSet<string>(BuiltInProfiles, StringComparer.OrdinalIgnoreCase);
-        var startInfo = new ProcessStartInfo(executablePath)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-        startInfo.ArgumentList.Add("-profiles");
-        using var process = Process.Start(startInfo);
-        if (process is not null)
-        {
-            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken);
-            var output = await outputTask;
-            _ = await errorTask;
-            if (process.ExitCode == 0)
-                profiles.UnionWith(WprProfileCatalog.Parse(output));
-        }
+        var result = await WprProcessRunner.RunAsync(executablePath, ["-profiles"], TimeSpan.FromSeconds(20), cancellationToken);
+        if (result.ExitCode != 0)
+            throw new InvalidOperationException($"Windows Performance Recorder could not list profiles: {result.Output}");
+        profiles.UnionWith(WprProfileCatalog.Parse(result.Output));
         return new WprCapabilities(version, profiles);
     }
 }
@@ -157,7 +142,7 @@ public sealed class WprController(IWprCommandBuilder commandBuilder) : IWprContr
     public async Task<WprStatusReport> GetStatusAsync(string executablePath, TimeSpan timeout, CancellationToken cancellationToken)
     {
         var result = await ExecuteAsync(executablePath, ["-status"], timeout, cancellationToken).ConfigureAwait(false);
-        if (!result.Launched) return new WprStatusReport(false, false, result.Output);
+        if (!result.Launched || result.ExitCode != 0) return new WprStatusReport(false, false, result.Output);
         return new WprStatusReport(true, !result.Output.Contains("not recording", StringComparison.OrdinalIgnoreCase), result.Output);
     }
 
@@ -178,6 +163,17 @@ public sealed class WprController(IWprCommandBuilder commandBuilder) : IWprContr
     private static async Task<(bool Launched, int ExitCode, string Output)> ExecuteAsync(string executablePath,
         IEnumerable<string> arguments, TimeSpan timeout, CancellationToken cancellationToken)
     {
+        var result = await WprProcessRunner.RunAsync(executablePath, arguments, timeout, cancellationToken).ConfigureAwait(false);
+        return (true, result.ExitCode, result.Output);
+    }
+}
+
+internal static class WprProcessRunner
+{
+    public static async Task<WprRunResult> RunAsync(string executablePath, IEnumerable<string> arguments,
+        TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         var startInfo = new ProcessStartInfo(executablePath)
         {
             UseShellExecute = false,
@@ -187,20 +183,27 @@ public sealed class WprController(IWprCommandBuilder commandBuilder) : IWprContr
         };
         foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo);
-        if (process is null) return (false, -1, "wpr.exe could not be launched.");
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        if (process is null) throw new InvalidOperationException("wpr.exe could not be launched.");
+        var outputTask = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+        var errorTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(timeout);
         try { await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false); }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
-            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
+            if (!process.HasExited)
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) when (process.HasExited) { }
+            }
+            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+            await Task.WhenAll(outputTask, errorTask).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             throw new TimeoutException("The command timed out.");
         }
         var details = string.Join(Environment.NewLine, new[] { await outputTask.ConfigureAwait(false), await errorTask.ConfigureAwait(false) }
             .Where(x => !string.IsNullOrWhiteSpace(x))).Trim();
-        return (true, process.ExitCode, details);
+        return new WprRunResult(process.ExitCode, details);
     }
 }
 

@@ -376,6 +376,50 @@ public sealed class SessionManagerTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "WprHelperSessionTests", Guid.NewGuid().ToString("N"));
 
     [Fact]
+    public async Task FailedWorkerCannotBeOverwrittenByDelayedProgress()
+    {
+        Directory.CreateDirectory(_root);
+        var wpr = Path.Combine(_root, "wpr.exe");
+        File.Copy(Environment.ProcessPath!, wpr);
+        var paths = new StoragePathResolver(Path.Combine(_root, "app"));
+        var repository = new DelayedProgressRepository();
+        var manager = new SessionManager(new ProfileValidator(), paths, repository,
+            new FailingAfterProgressWorker(), new FixedCapabilities(), new FileTransferService(), new FixedDisk(), new SystemClock());
+        var profile = new CaptureProfile
+        {
+            WprPath = wpr,
+            LaunchTargetApplication = false,
+            LocalDirectory = _root,
+            Stop = new StopOptions { StopAfterTargetExit = false, MaximumDuration = TimeSpan.FromSeconds(1) }
+        };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => manager.CaptureAsync(profile, null, CancellationToken.None));
+        await Task.Delay(300);
+        Assert.Equal(CaptureState.Failed, repository.LastState);
+    }
+
+    private sealed class DelayedProgressRepository : ISessionRepository
+    {
+        public CaptureState LastState { get; private set; }
+        public async Task SaveAsync(SessionRecord session, CancellationToken token)
+        {
+            if (session.State == CaptureState.StartingWpr) await Task.Delay(150, token);
+            LastState = session.State;
+        }
+        public Task<IReadOnlyList<SessionRecord>> FindRecoverableAsync(CancellationToken token) =>
+            Task.FromResult<IReadOnlyList<SessionRecord>>([]);
+    }
+
+    private sealed class FailingAfterProgressWorker : IElevatedWorkerClient
+    {
+        public Task<ElevatedCaptureResult> CaptureAsync(Guid id, CaptureProfile profile, string backingFile,
+            IProgress<CaptureProgress>? progress, CancellationToken token)
+        {
+            progress?.Report(new(CaptureState.StartingWpr, "started", TimeSpan.Zero, 0, long.MaxValue, null));
+            throw new InvalidOperationException("Synthetic worker failure");
+        }
+    }
+
+    [Fact]
     public async Task CompletedWorkerProducesFinalEtlWithoutRegressingState()
     {
         Directory.CreateDirectory(_root);

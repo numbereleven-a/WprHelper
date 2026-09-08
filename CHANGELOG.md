@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4
+
+- Fixed WPR command cancellation, timeouts, and status error handling.
+- Improved session state persistence and cleanup after interrupted checks.
+- Displayed capture warnings and preserved the ETL path when switching languages.
+- Disabled WPR health checks while a capture is running.
+
 ## 1.3
 
 - Add a wpr.exe check button that verifies the executable, lists available profiles, and runs a short test recording when elevated.

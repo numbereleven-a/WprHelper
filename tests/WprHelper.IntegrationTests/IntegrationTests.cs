@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Principal;
 using WprHelper.Contracts;
+using WprHelper.Core;
 using WprHelper.Infrastructure;
 
 namespace WprHelper.IntegrationTests;
@@ -25,6 +26,43 @@ public sealed class CapabilityIntegrationTests
 
 public sealed class RealWprSmokeTests
 {
+    [SkippableTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PublishedWorkerProducesEtl(bool launchTarget)
+    {
+        var executable = Environment.GetEnvironmentVariable("WPRHELPER_WORKER_EXE");
+        Skip.If(Environment.GetEnvironmentVariable("WPRHELPER_REAL_SMOKE") != "1" || string.IsNullOrWhiteSpace(executable),
+            "Set WPRHELPER_REAL_SMOKE=1 and WPRHELPER_WORKER_EXE to test the published executable.");
+        var wprPath = Environment.GetEnvironmentVariable("WPR_EXE") ?? WprExecutableLocator.FindPreferred();
+        var root = Path.Combine(Path.GetTempPath(), "WprHelperPublishedSmoke", Guid.NewGuid().ToString("N"));
+        var paths = new StoragePathResolver(root);
+        var clock = new SystemClock();
+        var manager = new SessionManager(new ProfileValidator(), paths, new JsonSessionRepository(paths, clock),
+            new ElevatedWorkerClient(new TargetProcessLauncher(), executable), new WprCapabilityDetector(),
+            new FileTransferService(), new DiskSpaceService(), clock);
+        var profile = new CaptureProfile
+        {
+            WprPath = wprPath,
+            LaunchTargetApplication = launchTarget,
+            TargetPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe"),
+            TargetArguments = "/d /c exit 0",
+            LocalDirectory = Path.Combine(root, "captures"),
+            FileNameTemplate = "smoke_{SessionId}",
+            Stop = new StopOptions
+            {
+                StopAfterTargetExit = launchTarget,
+                MaximumDuration = TimeSpan.FromSeconds(launchTarget ? 30 : 2)
+            }
+        };
+        var result = await manager.CaptureAsync(profile, null, CancellationToken.None);
+        Assert.Equal(CaptureState.Completed, result.Session.State);
+        Assert.Equal(launchTarget ? StopReason.TargetExited : StopReason.DurationReached, result.Session.StopReason);
+        Assert.Equal(launchTarget, result.Session.TargetPid.HasValue);
+        Assert.True(new FileInfo(Assert.Single(result.Files)).Length > 0);
+        Directory.Delete(root, recursive: true);
+    }
+
     [SkippableFact]
     public async Task MultipleProfilesProduceEtl_WhenExplicitlyEnabled()
     {

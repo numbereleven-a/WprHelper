@@ -1,11 +1,11 @@
 <Project>
   <PropertyGroup>
     <LangVersion>latest</LangVersion>
-    <Version>1.3</Version>
-    <VersionPrefix>1.3</VersionPrefix>
-    <AssemblyVersion>1.3.0.0</AssemblyVersion>
-    <FileVersion>1.3.0.0</FileVersion>
-    <InformationalVersion>1.3</InformationalVersion>
+    <Version>1.4</Version>
+    <VersionPrefix>1.4</VersionPrefix>
+    <AssemblyVersion>1.4.0.0</AssemblyVersion>
+    <FileVersion>1.4.0.0</FileVersion>
+    <InformationalVersion>1.4</InformationalVersion>
     <Authors>numbereleven-a</Authors>
     <AssemblyTitle>WPR Helper</AssemblyTitle>
     <Product>WPR Helper</Product>

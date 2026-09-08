@@ -49,7 +49,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _statusMessage = LocalizationService.Get("Ready"); _stateText = CaptureState.Idle.ToString();
         InitializeWprProfileOptions(["CPU"]);
         BrowseWprCommand = new RelayCommand(() => WprPath = PickExecutable(WprPath, "wpr.exe") ?? WprPath);
-        CheckWprCommand = new AsyncRelayCommand(CheckWprAsync, () => !IsCheckingWpr, HandleCommandError);
+        CheckWprCommand = new AsyncRelayCommand(CheckWprAsync, () => !IsCheckingWpr && !IsRunning, HandleCommandError);
         BrowseTargetCommand = new RelayCommand(() => { var path = PickExecutable(TargetPath, "*.exe"); if (path is not null) { TargetPath = path; WorkingDirectory = Path.GetDirectoryName(path) ?? string.Empty; } });
         BrowseLocalCommand = new RelayCommand(() => LocalDirectory = PickFolder(LocalDirectory) ?? LocalDirectory);
         BrowseDestinationCommand = new RelayCommand(() => DestinationDirectory = PickFolder(DestinationDirectory) ?? DestinationDirectory);
@@ -80,7 +80,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string DataRoot { get; }
     public string ApplicationVersion { get; } = Assembly.GetEntryAssembly()?.GetName().Version is { } version
         ? $"{version.Major}.{version.Minor}"
-        : "1.3";
+        : "1.4";
     public ObservableCollection<CaptureProfile> Profiles { get; } = [];
     public ObservableCollection<WprProfileOption> WprProfileOptions { get; } = [];
     public ObservableCollection<string> SelectedWprProfileDescriptions { get; } = [];
@@ -140,7 +140,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         set { Set(value); OnPropertyChanged(nameof(UiScale)); SaveApplicationSettings(); }
     }
     public double UiScale => UiScalePercent / 100d;
-    public bool IsRunning { get => _isRunning; private set { if (Set(ref _isRunning, value)) { StartCommand.RaiseCanExecuteChanged(); StopCommand.RaiseCanExecuteChanged(); ResetSettingsCommand.RaiseCanExecuteChanged(); } } }
+    public bool IsRunning { get => _isRunning; private set { if (Set(ref _isRunning, value)) { StartCommand.RaiseCanExecuteChanged(); StopCommand.RaiseCanExecuteChanged(); ResetSettingsCommand.RaiseCanExecuteChanged(); CheckWprCommand.RaiseCanExecuteChanged(); } } }
     public bool IsCheckingWpr
     {
         get => _isCheckingWpr;
@@ -172,6 +172,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var profile = BuildProfile();
+            SavePathText = profile.LocalDirectory;
             UpdateCaptureSummary(profile);
             var progress = new Progress<CaptureProgress>(p =>
             {
@@ -189,7 +190,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 }
             });
             var result = await _sessions.CaptureAsync(profile, progress, _captureCts.Token, _postProcessCts.Token);
-            StateText = result.Session.State.ToString(); StatusMessage = LocalizationService.Get("CaptureCompleted"); ProgressPercent = 100;
+            StateText = result.Session.State.ToString();
+            StatusMessage = string.Join(Environment.NewLine,
+                new[] { LocalizationService.Get("CaptureCompleted") }.Concat(result.Session.Warnings));
+            ProgressPercent = 100;
             var savedEtl = result.Files.FirstOrDefault(x => string.Equals(Path.GetExtension(x), ".etl", StringComparison.OrdinalIgnoreCase));
             if (savedEtl is not null) SavePathText = savedEtl;
             var outputDirectory = savedEtl is null ? profile.LocalDirectory : Path.GetDirectoryName(savedEtl);
@@ -263,7 +267,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private void UpdateCaptureSummary(CaptureProfile profile)
     {
         _summaryProfile = profile;
-        SavePathText = profile.LocalDirectory;
         var yes = LocalizationService.Get("Yes");
         var no = LocalizationService.Get("No");
         var off = LocalizationService.Get("Disabled");
@@ -517,7 +520,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         InitializeWprProfileOptions(selected);
         OnPropertyChanged(nameof(TargetExecutableName));
         if (_summaryProfile is not null) UpdateCaptureSummary(_summaryProfile);
-        if (!IsRunning) StatusMessage = LocalizationService.Get("Ready");
+        if (!IsRunning && _summaryProfile is null) StatusMessage = LocalizationService.Get("Ready");
     }
 
     private void LoadApplicationSettings()
